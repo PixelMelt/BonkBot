@@ -1,4 +1,4 @@
-const BonkBot = require('./bonkbot.js');
+const BonkBot = require('bonkbot');
 
 let bot = BonkBot.createBot({
     account: {
@@ -26,6 +26,7 @@ bot.events.on('connect', () => {
         // ignore spammy packets
         if (packet.type == 'timesync') return;
         if (packet.type == 'ping') return;
+        console.log(packet);
     });
 
     bot.events.on('banned', async () => {
