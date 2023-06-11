@@ -5,14 +5,15 @@ let bot = BonkBot.createBot({
         username: "pixelmelt",
         password: `password123`,
         guest: false,
-    }
+    },
+    // skin: '{skin_object_here}'
 });
 
 bot.events.on('ready', async () => {
     console.log('Bot is ready');
 
     // let fromurl = await bot.getAddressFromLink('https://bonk.io/710561')
-    let fromroomname = await bot.getAddressFromRoomName("me's game")
+    let fromroomname = await bot.getAddressFromRoomName("test")
 
     bot.setAddress(fromroomname)
     bot.connect();

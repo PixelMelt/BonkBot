@@ -21,7 +21,8 @@ let bot = BonkBot.createBot({
         username: "pixelmelt",
         password: `password123`,
         guest: false,
-    }
+    },
+    // skin: '{skin_object_here}'
 });
 
 bot.events.on('ready', async () => {
