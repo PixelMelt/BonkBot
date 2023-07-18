@@ -17,7 +17,7 @@ const createBot = function(options) {
     console.log("Starting BonkBot v3.0.0");
     options = options || {};
     return {
-        protocol_version: 45,
+        protocol_version: 46,
         skin: options.skin || `{"id":30,"scale":0.30000001192092896,"angle":0,"x":0,"y":0,"flipX":false,"flipY":false,"color":49663},{"id":75,"scale":0.07894168794155121,"angle":231.9313201904297,"x":-9.684389114379883,"y":2.921388626098633,"flipX":false,"flipY":false,"color":0},{"id":75,"scale":0.08011436462402344,"angle":246.96766662597656,"x":-7.4090142250061035,"y":6.844449520111084,"flipX":false,"flipY":false,"color":0},{"id":75,"scale":0.08011436462402344,"angle":-69.44682312011719,"x":7.4201555252075195,"y":6.805218696594238,"flipX":false,"flipY":false,"color":0},{"id":75,"scale":0.08325429260730743,"angle":-53.76435089111328,"x":9.440908432006836,"y":3.1005043983459473,"flipX":false,"flipY":false,"color":0},{"id":75,"scale":0.08254065364599228,"angle":7.713021755218506,"x":-1.975311517715454,"y":-9.978830337524414,"flipX":false,"flipY":false,"color":0},{"id":75,"scale":0.08310862630605698,"angle":-6.316278457641602,"x":2.2820658683776855,"y":-9.94627857208252,"flipX":false,"flipY":false,"color":0},{"id":13,"scale":0.3945557773113251,"angle":0.04141417145729065,"x":-0.0322730652987957,"y":-0.060396190732717514,"flipX":false,"flipY":false,"color":16777215},{"id":75,"scale":0.21413731575012207,"angle":419.81427001953125,"x":-2.4916510581970215,"y":1.3715696334838867,"flipX":false,"flipY":false,"color":16777215},{"id":75,"scale":0.21413731575012207,"angle":120.56624603271484,"x":2.608327865600586,"y":1.3715696334838867,"flipX":false,"flipY":false,"color":16777215},{"id":75,"scale":0.21413731575012207,"angle":0.39198538661003113,"x":0,"y":-3.107584238052368,"flipX":false,"flipY":false,"color":16777215},{"id":30,"scale":1.0002638101577759,"angle":-1.4328136444091797,"x":-0.04256964847445488,"y":0,"flipX":false,"flipY":false,"color":0},{"id":13,"scale":0.5588991045951843,"angle":-0.6648434996604919,"x":0,"y":0,"flipX":false,"flipY":false,"color":0},{"id":34,"scale":0.759579062461853,"angle":124.82804870605469,"x":-10.603617668151855,"y":-4.556829929351807,"flipX":false,"flipY":false,"color":16777215},{"id":34,"scale":0.7667332887649536,"angle":-3.340736150741577,"x":-0.7606570720672607,"y":11.768919944763184,"flipX":false,"flipY":false,"color":16777215},{"id":34,"scale":0.7913457751274109,"angle":241.08135986328125,"x":9.895292282104492,"y":-6.6403703689575195,"flipX":false,"flipY":false,"color":16777215}`,
         server: options.server || `b2ny2`,
         passbypass: options.passbypass || undefined,
@@ -504,24 +504,21 @@ const createBot = function(options) {
             return true
         },
         getRoomByName: async function(roomname) {
-            var url = "https://bonk2.io/scripts/getrooms.php";
-            var data = `version=${this.protocol_version}&gl=y&token=`;
-            return new Promise((resolve, reject) => {
-                axios.post(url, data)
-                .then(function (response) {
-                    var roomdata = response.data
-                    for (var i = roomdata.rooms.length - 1; i >= 0; i--) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    var rooms = await this.getRooms();
+                    for (var i = rooms.length - 1; i >= 0; i--) {
                         if (roomname != undefined) {
-                            if (roomdata.rooms[i].roomname == roomname) {
-                                resolve(roomdata.rooms[i])
+                            if (rooms[i].roomname == roomname) {
+                                resolve(rooms[i]);
                             }
                         }
                     }
-                    resolve(false)
-                }).catch(function (error) {
+                    resolve(false);
+                } catch (error) {
                     console.log(error);
-                });
-            })
+                }
+            });
         },
         getRooms: async function() {
             var url = "https://bonk2.io/scripts/getrooms.php";
@@ -529,12 +526,12 @@ const createBot = function(options) {
             return new Promise((resolve, reject) => {
                 axios.post(url, data)
                 .then(function (response) {
-                    var roomdata = response.data
-                    resolve(roomdata.rooms)
+                    var roomdata = response.data;
+                    resolve(roomdata.rooms);
                 }).catch(function (error) {
                     console.log(error);
                 });
-            })
+            });
         },
         getRoomAddress: async function(id) {
             var url = "https://bonk2.io/scripts/getroomaddress.php";
@@ -578,107 +575,111 @@ const createBot = function(options) {
             }
             if (JSON.parse(message.substring(2))) {
                 var message = JSON.parse(message.substring(2))
-                function switchyswitch(message){
-                    switch (message[0]) {
-                        case 1:
-                            // console.log(`detected server ping`)
-                            return `{"type":"ping"}`
-                        case 2:
-                            return `{"type":"roomaddr","roomaddr":"${message[1]}"}`
-                        case 3:
-                            return `{"type":"roomjoin","roombypass":"${message[7]}","roomid":"${message[6]}","teamslocked":"${message[5]}","myid":"${message[1]}","hostid":"${message[2]}","playerdata":${JSON.stringify(message[3])}}`
-                        case 4:
-                            if (message[4] == true) {
-                                return `{"type":"playerjoin","id":"${message[1]}","peerid":"${message[2]}","username":"${message[3]}","level":"0","guest":true,"skin":${JSON.stringify(message[7])},"tabbed":${message[6]}}`
-                            }else{
-                                return `{"type":"playerjoin","id":"${message[1]}","peerid":"${message[2]}","username":"${message[3]}","level":"${message[5]}","guest":false,"skin":${JSON.stringify(message[7])},"tabbed":${message[6]}}`
-                            }
-                        case 5:
-                            return `{"type":"playerleave","id":"${message[1]}"}`
-                        case 6:
-                            if(message[2] == `-1`){
-                                return `{"type":"gameclose"}`
-                            }else{
-                                return `{"type":"hostleave","oldid":"${message[1]}","newid":"${message[2]}"}`
-                            }
-                        case 7:
-                            if(!message[2].hasOwnProperty("f") || !message[2].hasOwnProperty("c") || !message[2].hasOwnProperty("i")){
-                                return `{"type":"playerinputerror"}`
-                            }
-                            return `{"type":"playerinput","id":"${message[1]}","input":${message[2][`i`]},"frame":${message[2][`f`]},"sequence":${message[2][`c`]}}`
-                        case 8:
-                            return `{"type":"playerready","id":"${message[1]}","ready":${message[2]}}`
-                        case 13:
-                            return `{"type":"gamecancel"}`
-                        case 15:
-                            return `{"type":"gamestart"}`
-                        case 16:
-                            return `{"type":"ratelimit","limit":"${message[1]}"}`
-                        case 18:
-                            return `{"type":"playermove","id":"${message[1]}","team":${message[2]}}`
-                        case 19:
-                            return `{"type":"teamslock","teamslocked":${message[1]}}`
-                        case 20:
-                            return `{"type":"chatmessage","id":"${message[1]}","message":"${message[2]}"}`
-                        case 21:
-                            return `{"type":"mapdata","data":"${message[1]}"}`
-                        case 23:
-                            return `{"type":"timesync","time":"${message[1].result}","id":"${message[1].id}"}`
-                        case 24:
-                            return `{"type":"playerkick","id":"${message[1]}"}`
-                        case 26:
-                            return `{"type":"modechange","mode":"${message[2]}","rootmode":"${message[1]}"}`
-                        case 27:
-                            return `{"type":"roundschange","rounds":${message[1]}}`
-                        case 29:
-                            return `{"type":"mapswap","data":"${message[1]}"}`
-                        case 33:
-                            return `{"type":"hostmaprequest","mapdata":"${message[1]}","id":"${message[2]}"}`
-                        case 34:
-                            return `{"type":"maprequest","map":"${message[1]}","author":"${message[2]}","id":"${message[3]}"}`
-                        case 36:
-                            return `{"type":"changebalance","id":"${message[1]}","balance":"${message[2]}"}`
-                        case 40:
-                            return `{"type":"savereplay","id":"${message[1]}"}`
-                        case 41:
-                            return `{"type":"hosttransfer","oldHost":"${message[1][`oldHost`]}","newHost":"${message[1][`newHost`]}"}`
-                        case 42:
-                            return `{"type":"friend","id":"${message[1]}"}`
-                        case 43:
-                            return `{"type":"countdown","countdown":"${message[1]}"}`
-                        case 44:
-                            return `{"type":"countdownabort"}`
-                        case 45:
-                            return `{"type":"playerlevelup","id":"${message[1]}","level":"${message[2]}"}`
-                        case 46:
-                            if(message[1][`newLevel`] != undefined){
-                                return `{"type":"levelup","xp":${message[1][`newXP`]},"level":${message[1][`newLevel`]},"token","${message[1][`newToken`]}"}`
-                            }else{
-                                return `{"type":"xp","xp":${message[1][`newXP`]}}`
-                            }
-                        case 48:
-                            message = message[1];
-                            let decodedState = this.decodeState(message.state);
-                            let decodedMap = this.decodeMap(message.gs.map);
-                            return `{"type":"state","gt":${message.gt},"rounds":${message.wl},"quickplay":${message.q},"teamsLocked":${message.tl},"teams":${message.tea},"gameType":"${message.ga}","mode":"${message.mo}","balance":${JSON.stringify(message.bal)}, "inputs":${JSON.stringify(message.inputs)}, "framecount":${message.fc}, "stateID":${message.stateID}, "admin":${JSON.stringify(message.admin)}, "map":${JSON.stringify(message.gs.map)}, "mapDecoded":${JSON.stringify(decodedMap)}, "state":${JSON.stringify(message.state)}, "stateDecoded":${JSON.stringify(decodedState)} "random":${JSON.stringify(message.random)}}`;
-                        case 52:
-                            return `{"type":"playertabbed","id":"${message[1]}","tabbed":${message[2]}}`
-                        case 58:
-                            return `{"type":"roomnamechange","name":"${message[1]}"}`
-                        case 59:
-                            if(message[1] == `1`){
-                                return `{"type":"roompassword","password":true}`
-                            }else{
-                                return `{"type":"roompassword","password":false}`
-                            }
-                        case 39:
-                            return `{"type":"teamtoggle","teams":"${message[1]}"}`
+                try {
+                    function switchyswitch(message){
+                        switch (message[0]) {
+                            case 1:
+                                return `{"type":"ping"}`
+                            case 2:
+                                return `{"type":"roomaddr","roomaddr":"${message[1]}"}`
+                            case 3:
+                                return `{"type":"roomjoin","roombypass":"${message[7]}","roomid":"${message[6]}","teamslocked":"${message[5]}","myid":"${message[1]}","hostid":"${message[2]}","playerdata":${JSON.stringify(message[3])}}`
+                            case 4:
+                                if (message[4] == true) {
+                                    return `{"type":"playerjoin","id":"${message[1]}","peerid":"${message[2]}","username":"${message[3]}","level":"0","guest":true,"skin":${JSON.stringify(message[7])},"tabbed":${message[6]}}`
+                                }else{
+                                    return `{"type":"playerjoin","id":"${message[1]}","peerid":"${message[2]}","username":"${message[3]}","level":"${message[5]}","guest":false,"skin":${JSON.stringify(message[7])},"tabbed":${message[6]}}`
+                                }
+                            case 5:
+                                return `{"type":"playerleave","id":"${message[1]}"}`
+                            case 6:
+                                if(message[2] == `-1`){
+                                    return `{"type":"gameclose"}`
+                                }else{
+                                    return `{"type":"hostleave","oldid":"${message[1]}","newid":"${message[2]}"}`
+                                }
+                            case 7:
+                                if(!message[2].hasOwnProperty("f") || !message[2].hasOwnProperty("c") || !message[2].hasOwnProperty("i")){
+                                    return `{"type":"playerinputerror"}`
+                                }
+                                return `{"type":"playerinput","id":"${message[1]}","input":${message[2][`i`]},"frame":${message[2][`f`]},"sequence":${message[2][`c`]}}`
+                            case 8:
+                                return `{"type":"playerready","id":"${message[1]}","ready":${message[2]}}`
+                            case 13:
+                                return `{"type":"gamecancel"}`
+                            case 15:
+                                return `{"type":"gamestart"}`
+                            case 16:
+                                return `{"type":"ratelimit","limit":"${message[1]}"}`
+                            case 18:
+                                return `{"type":"playermove","id":"${message[1]}","team":${message[2]}}`
+                            case 19:
+                                return `{"type":"teamslock","teamslocked":${message[1]}}`
+                            case 20:
+                                return `{"type":"chatmessage","id":"${message[1]}","message":"${message[2]}"}`
+                            case 21:
+                                return `{"type":"mapdata","data":"${message[1]}"}`
+                            case 23:
+                                return `{"type":"timesync","time":"${message[1].result}","id":"${message[1].id}"}`
+                            case 24:
+                                return `{"type":"playerkick","id":"${message[1]}"}`
+                            case 26:
+                                return `{"type":"modechange","mode":"${message[2]}","rootmode":"${message[1]}"}`
+                            case 27:
+                                return `{"type":"roundschange","rounds":${message[1]}}`
+                            case 29:
+                                return `{"type":"mapswap","data":"${message[1]}"}`
+                            case 33:
+                                return `{"type":"hostmaprequest","mapdata":"${message[1]}","id":"${message[2]}"}`
+                            case 34:
+                                return `{"type":"maprequest","map":"${message[1]}","author":"${message[2]}","id":"${message[3]}"}`
+                            case 36:
+                                return `{"type":"changebalance","id":"${message[1]}","balance":"${message[2]}"}`
+                            case 40:
+                                return `{"type":"savereplay","id":"${message[1]}"}`
+                            case 41:
+                                return `{"type":"hosttransfer","oldHost":"${message[1][`oldHost`]}","newHost":"${message[1][`newHost`]}"}`
+                            case 42:
+                                return `{"type":"friend","id":"${message[1]}"}`
+                            case 43:
+                                return `{"type":"countdown","countdown":"${message[1]}"}`
+                            case 44:
+                                return `{"type":"countdownabort"}`
+                            case 45:
+                                return `{"type":"playerlevelup","id":"${message[1]}","level":"${message[2]}"}`
+                            case 46:
+                                if(message[1][`newLevel`] != undefined){
+                                    return `{"type":"levelup","xp":${message[1][`newXP`]},"level":${message[1][`newLevel`]},"token","${message[1][`newToken`]}"}`
+                                }else{
+                                    return `{"type":"xp","xp":${message[1][`newXP`]}}`
+                                }
+                            case 48:
+                                message = message[1];
+                                let decodedState = this.decodeState(message.state);
+                                let decodedMap = this.decodeMap(message.gs.map);
+                                return `{"type":"state","gt":${message.gt},"rounds":${message.wl},"quickplay":${message.q},"teamsLocked":${message.tl},"teams":${message.tea},"gameType":"${message.ga}","mode":"${message.mo}","balance":${JSON.stringify(message.bal)}, "inputs":${JSON.stringify(message.inputs)}, "framecount":${message.fc}, "stateID":${message.stateID}, "admin":${JSON.stringify(message.admin)}, "map":${JSON.stringify(message.gs.map)}, "mapDecoded":${JSON.stringify(decodedMap)}, "state":${JSON.stringify(message.state)}, "stateDecoded":${JSON.stringify(decodedState)} "random":${JSON.stringify(message.random)}}`;
+                            case 52:
+                                return `{"type":"playertabbed","id":"${message[1]}","tabbed":${message[2]}}`
+                            case 58:
+                                return `{"type":"roomnamechange","name":"${message[1]}"}`
+                            case 59:
+                                if(message[1] == `1`){
+                                    return `{"type":"roompassword","password":true}`
+                                }else{
+                                    return `{"type":"roompassword","password":false}`
+                                }
+                            case 39:
+                                return `{"type":"teamtoggle","teams":"${message[1]}"}`
+                        }
+                        console.log(`BonkBot could not identify => `)
+                        console.log(message)
+                        return `{"type":"none"}`
                     }
-                    console.log(`BonkBot could not identify => `)
-                    console.log(message)
+                    return JSON.parse(switchyswitch(message))
+                } catch (error) {
+                    console.log(`Err: ${error}\nBonkbot: Probably just a json parsing error, you can ignore this.`)
                     return `{"type":"none"}`
                 }
-                return JSON.parse(switchyswitch(message))
             }
         },
         autoHandlePacket: function (data) {
