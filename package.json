@@ -1,8 +1,8 @@
 {
   "name": "bonkbot",
-  "version": "1.0.3",
+  "version": "3.0.0",
   "description": "A bonk.io botting library",
-  "main": "bonkbot.js",
+  "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -10,17 +10,27 @@
     "type": "git",
     "url": "git+https://github.com/PixelMelt/BonkBot.git"
   },
-  "author": "",
-  "license": "GPL3",
+  "author": "PixelMelt",
+  "license": "GPL-3.0",
   "bugs": {
     "url": "https://github.com/PixelMelt/BonkBot/issues"
   },
   "homepage": "https://github.com/PixelMelt/BonkBot#readme",
   "dependencies": {
     "axios": "^1.3.2",
-    "bonkbot": "^1.0.0",
+    "bytebuffer": "^5.0.1",
     "lz-string": "^1.4.4",
     "pson": "^2.0.0",
+    "socket.io-client": "^2.4.0",
     "ws": "^8.12.0"
-  }
+  },
+  "engines": {
+    "node": ">=12.0.0"
+  },
+  "keywords": [
+    "bonk.io",
+    "bot",
+    "game",
+    "automation"
+  ]
 }

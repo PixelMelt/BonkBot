@@ -1,2 +1,4 @@
 node_modules/*
-map
+packets.md
+spec.md
+paren_packets.md
