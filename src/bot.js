@@ -149,7 +149,7 @@ class BonkBot {
             // Get server information if using default
             if (!this.server || this.server === DEFAULT_SERVER) {
 				logger.info('Getting server information');
-                const serverInfo = await this.getServerInfo(this.token);
+                const serverInfo = await this.getServerInfo();
                 this.server = serverInfo.server;
                 
                 this.location = serverInfo;
@@ -1032,7 +1032,7 @@ class BonkBot {
     async getServerInfo() {
         try {
             const response = await axios.post(API.GET_ROOMS,
-                `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token}`, {
+                `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token ?? ""}`, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
                     }
@@ -1050,7 +1050,7 @@ class BonkBot {
                 country: response.data.country
             };
         } catch (error) {
-            logger.error('Failed to get server information', error);
+            logger.error(error);
             throw new Error(`Failed to get server information: ${error.message}`);
         }
     }

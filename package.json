@@ -1,6 +1,6 @@
 {
   "name": "bonkbot",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "A bonk.io botting library",
   "main": "src/index.js",
   "scripts": {
