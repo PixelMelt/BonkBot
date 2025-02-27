@@ -19,6 +19,7 @@ bot.events.on("ready", async () => {
 		const roomInfo = await bot.getAddressFromRoomName("test");
 		// const roomInfo = await bot.getAddressFromUrl("https://bonk.io/533118qkpuw");
 
+
 		console.log(`Found room: ${roomInfo.roomname}`);
 
 		// Set the room address

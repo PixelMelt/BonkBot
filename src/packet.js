@@ -58,7 +58,7 @@ function parsePacket(packet) {
           return {
               	type: "PLAYER_JOIN",
 				id: packet[1],
-				peerid: packet[2],
+				peerID: packet[2],
 				username: packet[3],
 				guest: isGuest,
 				level: isGuest ? "0" : packet[5],

@@ -40,7 +40,7 @@ class BonkBot {
      * @param {string} [options.server=b2ny1] - Server to connect to
      * @param {string} [options.bypass] - Pass bypass
      * @param {string} [options.token] - Authentication token
-     * @param {string} [options.peerid] - Peer ID
+     * @param {string} [options.peerID] - Peer ID
      * @param {number} [options.logLevel=LOG_LEVELS.INFO] - Log level
      */
     constructor(options = {}) {
@@ -66,7 +66,7 @@ class BonkBot {
         this.server = options.server || DEFAULT_SERVER;
         this.bypass = options.bypass;
         this.token = options.token;
-        this.peerID = options.peerid || this.generatePeerId();
+        this.peerID = options.peerID || this.generatePeerId();
 
 
         // Create event emitter
@@ -77,6 +77,13 @@ class BonkBot {
         this.connected = false;
         this.keepAliveTimer = null;
         this.timeSyncCount = 1;
+
+        this.location = {
+            lat: 0,
+            long: 0,
+            country: "US",
+            server: "b2ny1"
+        }
 
 		this.timeSync = {
 			count: 0,
@@ -144,6 +151,9 @@ class BonkBot {
 				logger.info('Getting server information');
                 const serverInfo = await this.getServerInfo(this.token);
                 this.server = serverInfo.server;
+                
+                this.location = serverInfo;
+
                 this.room.server = this.server;
                 logger.info(`Using server: ${this.server}`);
             }
@@ -301,42 +311,9 @@ class BonkBot {
             this.socket.disconnect();
             this.socket = null;
         }
+        return true;
     }
 
-    /**
-     * Get a room address from a room name
-     * @param {string} roomName - Room name
-     * @returns {Promise<Object>} Room address information
-     */
-    async getAddressFromRoomName(roomName) {
-        logger.info(`Getting address for room: ${roomName}`);
-
-        try {
-            // Find room by name
-            const room = await this.getRoomByNam(roomName, this.token);
-
-            if (!room) {
-                throw new Error(`Room not found: ${roomName}`);
-            }
-
-            // Get room address
-            const address = await this.getRoomAddress(room.id);
-
-            const result = {
-                roomname: room.roomname,
-                address: address.address,
-                server: address.server,
-                bypass: ''
-            };
-
-            logger.info(`Got address for room: ${roomName}`);
-
-            return result;
-        } catch (error) {
-            logger.error(`Failed to get address for room: ${roomName}`, error);
-            throw error;
-        }
-    }
 
     async getAddressFromUrl(url) {
 		const regex = /\/(\d{6})([a-zA-Z0-9]{5})?$/;
@@ -370,7 +347,7 @@ class BonkBot {
 		  console.error('Error getting join link:', error);
 		  throw error; // Re-throw to allow caller to handle the error
 		}
-	  }
+	}
 
     /**
      * Join a room
@@ -395,7 +372,7 @@ class BonkBot {
             guest: this.account.guest,
             dbid: 2,
             version: this.PROTOCOL_VERSION,
-            peerID: options.peerid || this.peerID,
+            peerID: options.peerID || this.peerID,
             bypass: this.room.bypass || '',
             avatar: this.avatar
         };
@@ -408,7 +385,7 @@ class BonkBot {
         }
 
         // Send join message
-        this.sendMessage(CLIENT_MESSAGE_TYPES.JOIN_ROOM, joinData);
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.JOIN_ROOM, joinData);
 
         logger.info(`Join request sent for room: ${this.room.name}`);
     }
@@ -432,7 +409,7 @@ class BonkBot {
 
         // Prepare create data
 		const createData = {
-			peerID: options.peerid ?? this.peerID,
+			peerID: options.peerID ?? this.peerID,
 			roomName: options.roomName ?? this.room.name,
 			maxPlayers: options.maxPlayers ?? this.room.maxPlayers,
 			password: options.password ?? this.room.password,
@@ -440,9 +417,9 @@ class BonkBot {
 			guest: options.guest ?? this.account.guest,
 			minLevel: options.minLevel ?? 0,
 			maxLevel: options.maxLevel ?? 999,
-			latitude: options.latitude ?? 0,
-			longitude: options.longitude ?? 0,
-			country: options.country ?? 'US',
+			latitude: options.latitude ?? this.location.lat,
+			longitude: options.longitude ?? this.location.long,
+			country: options.country ?? this.location.country,
 			version: this.PROTOCOL_VERSION,
 			hidden: options.hidden ? 1 : 0,
 			quick: options.quick ?? false,
@@ -455,7 +432,7 @@ class BonkBot {
 		}
 
         // Send create message
-        this.sendMessage(CLIENT_MESSAGE_TYPES.CREATE_ROOM, createData);
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.CREATE_ROOM, createData);
 
 		// set the only player to yorself
 		this.players.set(0, {
@@ -495,10 +472,6 @@ class BonkBot {
             bypass: this.room.bypass
         };
     }
-
-	getShareLink(){
-		return "https://bonk.io/" + this.room.dbid + this.room.bypass;
-	}
 
     /**
      * Get a player by ID
@@ -540,117 +513,13 @@ class BonkBot {
         return players;
     }
 
-    /**
-     * Send a chat message
-     * @param {string} message - Message to send
-     */
-    chat(message) {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.CHAT_MESSAGE, {
-            message
-        });
-    }
-
-    /**
-     * Set player ready status
-     * @param {boolean} ready - Ready status
-     */
-    ready(ready) {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.SET_READY, {
-            ready
-        });
-    }
-
-    /**
-     * Join a team
-     * @param {number} team - Team to join
-     */
-    joinTeam(team) {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.CHANGE_OWN_TEAM, {
-            targetTeam: team
-        });
-    }
-
-    /**
-     * Toggle teams lock
-     * @param {boolean} locked - Whether teams are locked
-     */
-    toggleTeams(locked) {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.TEAM_LOCK, {
-            teamLock: locked
-        });
-    }
-
-    /**
-     * Ban a player
-     * @param {string|number} playerId - Player ID to ban
-     */
-    banPlayer(playerId) {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.KICK_BAN_PLAYER, {
-            banshortid: playerId
-        });
-    }
-
-    /**
-     * Leave the game
-     */
-    leaveGame() {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.RETURN_TO_LOBBY);
-    }
-
-    /**
-     * Give host to another player
-     * @param {string|number} playerId - Player ID to give host to
-     */
-    giveHost(playerId) {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_HOST_CHANGE, {
-            id: playerId
-        });
-    }
-
-	/**
-	 * Get the host player
-	 * @returns {Object} Host player object
-	 */
-	getHost(){
-		return this.players.get(this.game.host);
-	}
-
-    /**
-     * Set number of rounds
-     * @param {number} rounds - Number of rounds
-     */
-    setRounds(rounds) {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_ROUNDS, {
-            w: rounds
-        });
-    }
-
-    /**
-     * Send an input to the game
-     * @param {Object} input - Input data
-     */
-    sendInput(input) {
-        this.checkConnection();
-        this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_INPUTS, {
-            i: input.input,
-            f: input.frame,
-            c: input.sequence
-        });
-    }
+    
 
     /**
      * Automatically handle a packet
      * @param {Object} packet - Packet to handle
      */
-    autoHandlePacket(packet) {
+    async autoHandlePacket(packet) {
         switch (packet.type) {
 
 			case 'ROOM_SHARE_LINK':
@@ -764,7 +633,7 @@ class BonkBot {
 					this.players.set(id, playerPing);
 				}
 
-				this.sendMessage(CLIENT_MESSAGE_TYPES.PING_RESPONSE, { id: packet.pingId })
+				await this.sendMessage(CLIENT_MESSAGE_TYPES.PING_RESPONSE, { id: packet.pingId })
 				break;
 
 			case 'CHAT_MESSAGE':
@@ -842,7 +711,7 @@ class BonkBot {
             case 'PLAYER_JOIN':
                 // Add player
                 this.players.set(packet.id, {
-                    peerID: packet.peerid,
+                    peerID: packet.peerID,
                     guest: packet.guest,
 					team: 1,
 					teamName: TEAM_NAMES[1],
@@ -866,7 +735,7 @@ class BonkBot {
 				// check if the bot is host
 				const botPlayer = this.players.get(this.game.id);
 				if (botPlayer.host) {
-					this.sendMessage(CLIENT_MESSAGE_TYPES.INFORM_IN_LOBBY, {
+					await this.sendMessage(CLIENT_MESSAGE_TYPES.INFORM_IN_LOBBY, {
 						sid: packet.id,
 						gs: {
 							map: this.room.map || {
@@ -1054,7 +923,7 @@ class BonkBot {
         // Default to guest account
         const validatedAccount = {
             guest: true,
-            username: `BonkBot-${Math.floor(Math.random() * 10000)}`
+            username: `BonkBot${Math.floor(Math.random() * 10000)}`
         };
 
         // Override with provided values
@@ -1120,15 +989,50 @@ class BonkBot {
     }
 
     /**
+     * Get a room address from a room name
+     * @param {string} roomName - Room name
+     * @returns {Promise<Object>} Room address information
+     */
+    async getAddressFromRoomName(roomName) {
+        logger.info(`Getting address for room: ${roomName}`);
+
+        try {
+            // Find room by name
+            const room = await this.getRoomByName(roomName, this.token);
+
+            if (!room) {
+                throw new Error(`Room not found: ${roomName}`);
+            }
+
+            // Get room address
+            const address = await this.getRoomAddress(room.id);
+
+            const result = {
+                roomname: room.roomname,
+                address: address.address,
+                server: address.server,
+                bypass: ''
+            };
+
+            logger.info(`Got address for room: ${roomName}`);
+
+            return result;
+        } catch (error) {
+            logger.error(`Failed to get address for room: ${roomName}`, error);
+            throw error;
+        }
+    }
+
+    /**
      * Get server information
      * @private
      * @param {string} [token] - Authentication token
      * @returns {Promise<Object>} Server information
      */
-    async getServerInfo(token = '') {
+    async getServerInfo() {
         try {
             const response = await axios.post(API.GET_ROOMS,
-                `version=${this.PROTOCOL_VERSION}&gl=y&token=${token}`, {
+                `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token}`, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
                     }
@@ -1154,15 +1058,14 @@ class BonkBot {
     /**
      * Get list of rooms
      * @private
-     * @param {string} [token] - Authentication token
      * @returns {Promise<Array>} List of rooms
      */
-    async getRooms(token = '') {
+    async getRooms() {
         try {
             logger.info('Getting list of rooms');
 
             const response = await axios.post(API.GET_ROOMS,
-                `version=${this.PROTOCOL_VERSION}&gl=y&token=${token}`, {
+                `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token}`, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
                     }
@@ -1185,14 +1088,13 @@ class BonkBot {
      * Get room by name
      * @private
      * @param {string} roomName - Room name
-     * @param {string} [token] - Authentication token
      * @returns {Promise<Object|null>} Room object or null if not found
      */
-    async getRoomByNam(roomName, token = '') {
+    async getRoomByName(roomName) {
         try {
             logger.info(`Searching for room: ${roomName}`);
 
-            const rooms = await this.getRooms(token);
+            const rooms = await this.getRooms(this.token);
 
             for (const room of rooms) {
                 if (room.roomname === roomName) {
@@ -1277,6 +1179,40 @@ class BonkBot {
 
 
     /**
+     * Send a message to the server using Socket.IO v2 protocol
+     * @private
+     * @param {number} eventId - Event ID from CLIENT_MESSAGE_TYPES
+     * @param {any} data - Message data
+     */
+    async sendMessage(eventId, data) {
+        this.checkConnection()
+
+        // if(eventId != 18 && eventId != 1){ // just for pix to not get annoyed by things
+        // }
+        logger.debug(`Sending message type ${eventId}`, data);
+
+        // For Socket.IO v2, we need to emit to the 'message' event with the event ID and data
+        // The server expects a message in the format: [eventId, data]
+        await this.socket.emit(eventId, data);
+        return true
+    }
+
+
+
+
+    /**
+     * 
+     * User callable methods (the bot api)
+     * 
+     */
+
+
+
+
+
+
+
+    /**
      * Clean up resources
      * @private
      */
@@ -1287,39 +1223,129 @@ class BonkBot {
             clearInterval(this.keepAliveTimer);
             this.keepAliveTimer = null;
         }
+        return true;
     }
+
+    getShareLink(){
+		return "https://bonk.io/" + this.room.dbid + this.room.bypass;
+	}
+
+
+
 
 
     /**
-     * Send a message to the server using Socket.IO v2 protocol
-     * @private
-     * @param {number} eventId - Event ID from CLIENT_MESSAGE_TYPES
-     * @param {any} data - Message data
+     * Send a chat message
+     * @param {string} message - Message to send
      */
-    sendMessage(eventId, data) {
-        this.checkConnection()
+    async chat(message) {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.CHAT_MESSAGE, {
+            message
+        });
+    }
 
-        // Double-check that the socket is still connected
-        if (!this.socket.connected) {
-            this.connected = false;
-            throw new Error('Socket disconnected');
-        }
+    /**
+     * Set player ready status
+     * @param {boolean} ready - Ready status
+     */
+    async ready(ready) {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.SET_READY, {
+            ready
+        });
+    }
 
-		if(eventId != 18 && eventId != 1){
-			logger.debug(`Sending message type ${eventId}`, data);
-		}
+    /**
+     * Join a team
+     * @param {number} team - Team to join
+     */
+    async joinTeam(team) {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.CHANGE_OWN_TEAM, {
+            targetTeam: team
+        });
+    }
 
-        // For Socket.IO v2, we need to emit to the 'message' event with the event ID and data
-        // The server expects a message in the format: [eventId, data]
-        this.socket.emit(eventId, data);
+    /**
+     * Toggle teams lock
+     * @param {boolean} locked - Whether teams are locked
+     */
+    async toggleTeams(locked) {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.TEAM_LOCK, {
+            teamLock: locked
+        });
+    }
+
+    /**
+     * Ban a player
+     * @param {string|number} playerId - Player ID to ban
+     */
+    async banPlayer(playerId) {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.KICK_BAN_PLAYER, {
+            banshortid: playerId
+        });
+    }
+
+    /**
+     * Leave the game
+     */
+    async leaveGame() {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.RETURN_TO_LOBBY);
+    }
+
+    /**
+     * Give host to another player
+     * @param {string|number} playerId - Player ID to give host to
+     */
+    async giveHost(playerId) {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_HOST_CHANGE, {
+            id: playerId
+        });
+    }
+
+	/**
+	 * Get the host player
+	 * @returns {Object} Host player object
+	 */
+	getHost(){
+		return this.players.get(this.game.host);
+	}
+
+    /**
+     * Set number of rounds
+     * @param {number} rounds - Number of rounds
+     */
+    async setRounds(rounds) {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_ROUNDS, {
+            w: rounds
+        });
+    }
+
+    /**
+     * Send an input to the game
+     * @param {Object} input - Input data
+     */
+    async sendInput(input) {
+        this.checkConnection();
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_INPUTS, {
+            i: input.input,
+            f: input.frame,
+            c: input.sequence
+        });
     }
 
     /**
      * Send a timesync message to the server
      * @private
      */
-    sendTimesync() {
-        this.sendMessage(CLIENT_MESSAGE_TYPES.TIMESYNC, {
+    async sendTimesync() {
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.TIMESYNC, {
             jsonrpc: "2.0",
             id: this.timeSync.count++,
             method: "timesync"
@@ -1335,6 +1361,7 @@ class BonkBot {
         if (!this.connected || !this.socket) {
             throw new Error('Not connected to server');
         }
+        return true;
     }
 
     /**
