@@ -4,6 +4,7 @@
 const EventEmitter = require('events');
 const io = require('socket.io-client');
 const axios = require('axios');
+const https = require('https');
 const {
     createLogger
 } = require('./utils/logger');
@@ -24,6 +25,12 @@ const { LOG_LEVELS } = require("./utils/logger");
 
 // Create logger
 const logger = createLogger('BonkBot');
+
+// Create HTTPS agent for axios with certificate verification disabled
+// NOTE: bonk.io servers use Sectigo certificates with incomplete chains
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: false
+});
 
 /**
  * Main BonkBot class
@@ -222,20 +229,34 @@ class BonkBot {
             this.disconnect();
         }
 
+        // Disable TLS certificate verification for bonk.io servers
+        // NOTE: This is required because bonk.io uses Sectigo certificates with incomplete chains
+        // and socket.io-client v2.x with engine.io-client v3.x doesn't properly pass
+        // rejectUnauthorized option to the underlying ws library
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
         logger.info(`Connecting to server: ${this.server}`);
 
         const socketAddr = `https://${this.server}.bonk.io`;
 
         return new Promise((resolve, reject) => {
             try {
-                // Connect using socket.io v2.x
-                this.socket = io(socketAddr, {
+                // Configure socket.io options
+                const socketOptions = {
                     transports: ['websocket'],
                     reconnection: false,
                     timeout: 10000,
                     forceNew: true,
-                    path: '/socket.io'
-                });
+                    path: '/socket.io',
+                    // NOTE: socket.io-client v2.x with engine.io-client v3.x has a bug where
+                    // custom CA certificates cannot be properly passed to the websocket transport.
+                    // As a workaround, we disable certificate verification for bonk.io servers
+                    // which use Sectigo certificates with incomplete chains.
+                    rejectUnauthorized: false
+                };
+
+                logger.info('Creating Socket.IO connection with certificate verification disabled');
+                this.socket = io(socketAddr, socketOptions);
 
                 // Set up connection timeout
                 const timeout = setTimeout(() => {
@@ -265,12 +286,26 @@ class BonkBot {
                 });
 
                 // Connection error
-                this.socket.on('error', (error) => {
-                    logger.error('Socket.IO connection error', error);
+                this.socket.on('connect_error', (error) => {
+                    logger.error('Socket.IO connection error:', error.message || error);
 
                     if (!this.connected) {
                         clearTimeout(timeout);
-                        reject(new Error(`Failed to connect to server: ${error.message || error}`));
+                        const errorMsg = error.message || error.description?.message || 'Unknown error';
+                        reject(new Error(`Failed to connect to server: ${errorMsg}`));
+                    }
+
+                    this.events.emit('error', error);
+                });
+
+                // Connection error (fallback handler)
+                this.socket.on('error', (error) => {
+                    logger.error('Socket.IO error:', error.message || error);
+
+                    if (!this.connected) {
+                        clearTimeout(timeout);
+                        const errorMsg = error.message || error.description?.message || 'Unknown error';
+                        reject(new Error(`Failed to connect to server: ${errorMsg}`));
                     }
 
                     this.events.emit('error', error);
@@ -333,7 +368,8 @@ class BonkBot {
 		  const response = await axios.post(API.AUTOJOIN, data.toString(), {
 			headers: {
 			  'Content-Type': 'application/x-www-form-urlencoded'
-			}
+			},
+			httpsAgent: httpsAgent
 		  });
 	  
 		  const result = response.data;
@@ -368,7 +404,7 @@ class BonkBot {
         // Prepare join data
         const joinData = {
             joinID: this.room.address,
-            roomPassword: options.password.toString() || '',
+            roomPassword: options.password ? options.password.toString() : '',
             guest: this.account.guest,
             dbid: 2,
             version: this.PROTOCOL_VERSION,
@@ -972,7 +1008,8 @@ class BonkBot {
                 `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&remember=true`, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
-                    }
+                    },
+                    httpsAgent: httpsAgent
                 }
             );
 
@@ -1035,7 +1072,8 @@ class BonkBot {
                 `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token ?? ""}`, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
-                    }
+                    },
+                    httpsAgent: httpsAgent
                 }
             );
 
@@ -1065,10 +1103,11 @@ class BonkBot {
             logger.info('Getting list of rooms');
 
             const response = await axios.post(API.GET_ROOMS,
-                `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token}`, {
+                `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token || ""}`, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
-                    }
+                    },
+                    httpsAgent: httpsAgent
                 }
             );
 
@@ -1125,7 +1164,8 @@ class BonkBot {
                 `id=${id}`, {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded'
-                    }
+                    },
+                    httpsAgent: httpsAgent
                 }
             );
 
