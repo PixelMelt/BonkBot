@@ -1124,6 +1124,76 @@ class BonkBot {
     }
 
     /**
+     * Change game mode
+     * @param {string} mode - Game mode ('b' = classic, 'ar' = arrows, 'ard' = death arrows, 'sp' = grapple, 'v' = vtol, 'f' = football)
+     * @param {string} engine - Game engine ('b' = bonk, 'f' = football)
+    */
+    async setGameMode(mode, engine = 'b') {
+        this.checkConnection();
+        
+        // Validar modo
+        const validModes = ['b', 'ar', 'ard', 'sp', 'v', 'f'];
+        const validEngines = ['b', 'f'];
+        
+        if (!validModes.includes(mode)) {
+            throw new Error(`Invalid mode. Valid modes: ${validModes.join(', ')}`);
+        }
+        
+        if (!validEngines.includes(engine)) {
+            throw new Error(`Invalid engine. Valid engines: ${validEngines.join(', ')}`);
+        }
+        
+        await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_MODE, {
+            ga: engine,
+            mo: mode
+        });
+        
+        logger.info(`Game mode changed to: ${GAMEMODE_NAMES[mode]} (${ENGINE_NAMES[engine]})`);
+    }
+
+    /**
+    * Set Football mode
+    */
+    async setFootballMode() {
+        await this.setGameMode('f', 'f');
+    }
+
+    /**
+    * Set Classic mode
+    */
+    async setClassicMode() {
+        await this.setGameMode('b', 'b');
+    }
+
+    /**
+    * Set Arrows mode
+    */
+    async setArrowsMode() {
+        await this.setGameMode('ar', 'b');
+    }
+
+    /**
+    * Set Death Arrows mode
+    */
+    async setDeathArrowsMode() {
+        await this.setGameMode('ard', 'b');
+    }
+
+    /**
+    * Set Grapple mode
+    */
+    async setGrappleMode() {
+        await this.setGameMode('sp', 'b');
+    }
+
+    /**
+    * Set VTOL mode
+    */
+    async setVTOLMode() {
+        await this.setGameMode('v', 'b');
+    }
+
+    /**
      * Get room by name
      * @private
      * @param {string} roomName - Room name
