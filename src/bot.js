@@ -1303,7 +1303,7 @@ class BonkBot {
 
         // For Socket.IO v2, we need to emit to the 'message' event with the event ID and data
         // The server expects a message in the format: [eventId, data]
-        await this.socket.emit(eventId, data);
+        this.socket.emit(eventId, data);
         return true
     }
 
