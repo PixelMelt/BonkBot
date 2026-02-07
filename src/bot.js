@@ -815,12 +815,15 @@ class BonkBot {
 							tea: this.room.teams || false,
 							ga: "b",
 							mo: "b",
-							bal: this.getAllPlayers().reduce((balances, player) => {
-								if (player.balance) {
-									balances[player.id] = player.balance;
+							bal: (() => {
+								const balances = {};
+								for (const player of this.players.values()) {
+									if (player.balance) {
+										balances[player.id] = player.balance;
+									}
 								}
 								return balances;
-							}, {})
+							})()
 						}
 					});
 				}
