@@ -526,7 +526,6 @@ class BonkBot {
 	 */
 	getPlayerIDByUsername(username, guest = false) {
 		for (const player of this.players.values()) {
-			console.log(player)
 			if (player.username == username && player.guest == guest) {
 				return player.id;
 			}
