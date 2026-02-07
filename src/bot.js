@@ -540,13 +540,7 @@ class BonkBot {
      * @returns {Array<Object>} Array of player objects
      */
     getAllPlayers() {
-        const players = [];
-
-        for (const player of this.players.values()) {
-            players.push(player);
-        }
-
-        return players;
+        return Array.from(this.players.values());
     }
 
     
