@@ -9,7 +9,6 @@ const fs = require('fs');
 const path = require('path');
 
 const OUTPUT_FILE = path.join(__dirname, '..', 'bonk_fullchain.pem');
-const BONK_SERVER = 'b2ny1.bonk.io';
 
 /**
  * Download intermediate certificate from Sectigo
@@ -103,9 +102,8 @@ function main() {
         // Save to file
         fs.writeFileSync(OUTPUT_FILE, fullChain, 'utf8');
 
-        console.log(`✓ Downloaded ${certCount} certificate(s)`);
-        console.log(`✓ Certificate chain saved to: ${OUTPUT_FILE}`);
-        console.log('✓ You can now run your bot with: npm run host-bot or npm run simple-bot');
+        console.log(`Downloaded ${certCount} certificate(s)`);
+        console.log(`Certificate chain saved to: ${OUTPUT_FILE}`);
     } catch (error) {
         console.error('Error downloading certificates:', error.message);
         console.error('\nNote: This script requires curl and openssl to be installed on your system.');

@@ -5,23 +5,19 @@ const EventEmitter = require('events');
 const io = require('socket.io-client');
 const axios = require('axios');
 const https = require('https');
+const { createLogger } = require('./utils/logger');
 const {
-    createLogger
-} = require('./utils/logger');
-const {
-    DEFAULT_SERVER,
-    DEFAULT_AVATAR,
+	DEFAULT_SERVER,
+	DEFAULT_AVATAR,
 	GAMEMODE_NAMES,
 	ENGINE_NAMES,
 	TEAM_NAMES,
-    CLIENT_MESSAGE_TYPES,
-    API,
-    SERVER_MESSAGE_TYPES
+	CLIENT_MESSAGE_TYPES,
+	API,
+	SERVER_MESSAGE_TYPES,
 } = require('./utils/constants');
-const {
-    parsePacket
-} = require('./packet');
-const { LOG_LEVELS } = require("./utils/logger");
+const { parsePacket } = require('./packet');
+const { LOG_LEVELS } = require('./utils/logger');
 
 // Create logger
 const logger = createLogger('BonkBot');
@@ -29,85 +25,86 @@ const logger = createLogger('BonkBot');
 // Create HTTPS agent for axios with certificate verification disabled
 // NOTE: bonk.io servers use Sectigo certificates with incomplete chains
 const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
+	rejectUnauthorized: false,
 });
 
 /**
  * Main BonkBot class
  */
 class BonkBot {
-    /**
-     * Create a new BonkBot instance
-     * @param {Object} options - Bot options
-     * @param {Object} options.account - Account information
-     * @param {string} [options.account.username] - Username
-     * @param {string} [options.account.password] - Password
-     * @param {boolean} [options.account.guest=true] - Whether the account is a guest
-     * @param {string} [options.avatar] - Bot avatar
-     * @param {string} [options.server=b2ny1] - Server to connect to
-     * @param {string} [options.bypass] - Pass bypass
-     * @param {string} [options.token] - Authentication token
-     * @param {string} [options.peerID] - Peer ID
-     * @param {number} [options.logLevel=LOG_LEVELS.INFO] - Log level
-     */
-    constructor(options = {}) {
-        // Set log level
-        if (options.logLevel !== undefined) {
-            logger.setLevel(options.logLevel);
-        }
+	/**
+	 * Create a new BonkBot instance
+	 * @param {Object} options - Bot options
+	 * @param {Object} options.account - Account information
+	 * @param {string} [options.account.username] - Username
+	 * @param {string} [options.account.password] - Password
+	 * @param {boolean} [options.account.guest=true] - Whether the account is a guest
+	 * @param {string} [options.avatar] - Bot avatar
+	 * @param {string} [options.server=b2ny1] - Server to connect to
+	 * @param {string} [options.bypass] - Pass bypass
+	 * @param {string} [options.token] - Authentication token
+	 * @param {string} [options.peerID] - Peer ID
+	 * @param {number} [options.logLevel=LOG_LEVELS.INFO] - Log level
+	 */
+	constructor(options = {}) {
+		// Set log level
+		if (options.logLevel !== undefined) {
+			logger.setLevel(options.logLevel);
+		}
 
-        logger.info('Creating new BonkBot instance');
+		logger.info('Creating new BonkBot instance');
 
-        // Initialize properties
-		this.PROTOCOL_VERSION = options.PROTOCOL_VERSION
+		// Initialize properties
+		this.PROTOCOL_VERSION = options.PROTOCOL_VERSION;
 		this.HARDCODED_PROTOCOL_VERSION = 49; // dont change this, pass the property to the function
 
-		if(this.PROTOCOL_VERSION == undefined){
-			logger.warn("You should really set the PROTOCOL_VERSION to the correct one in the createBot() options object, without it the bot may fail to start")
-			logger.warn("Defaulting PROTOCOL_VERSION to: " + this.HARDCODED_PROTOCOL_VERSION)
+		if (this.PROTOCOL_VERSION == undefined) {
+			logger.warn(
+				'You should really set the PROTOCOL_VERSION to the correct one in the createBot() options object, without it the bot may fail to start',
+			);
+			logger.warn('Defaulting PROTOCOL_VERSION to: ' + this.HARDCODED_PROTOCOL_VERSION);
 			this.PROTOCOL_VERSION = this.HARDCODED_PROTOCOL_VERSION;
 		}
 
-        this.account = this.validateAccount(options.account || {});
-        this.avatar = options.avatar || DEFAULT_AVATAR;
-        this.server = options.server || DEFAULT_SERVER;
-        this.bypass = options.bypass;
-        this.token = options.token;
-        this.peerID = options.peerID || this.generatePeerId();
+		this.account = this.validateAccount(options.account || {});
+		this.avatar = options.avatar || DEFAULT_AVATAR;
+		this.server = options.server || DEFAULT_SERVER;
+		this.bypass = options.bypass;
+		this.token = options.token;
+		this.peerID = options.peerID || this.generatePeerId();
 
+		// Create event emitter
+		this.events = new EventEmitter();
 
-        // Create event emitter
-        this.events = new EventEmitter();
+		// Socket connection
+		this.socket = null;
+		this.connected = false;
+		this.keepAliveTimer = null;
+		this.timeSyncCount = 1;
 
-        // Socket connection
-        this.socket = null;
-        this.connected = false;
-        this.keepAliveTimer = null;
-        this.timeSyncCount = 1;
-
-        this.location = {
-            lat: 0,
-            long: 0,
-            country: "US",
-            server: "b2ny1"
-        }
+		this.location = {
+			lat: 0,
+			long: 0,
+			country: 'US',
+			server: 'b2ny1',
+		};
 
 		this.timeSync = {
 			count: 0,
 			last_sync: 0,
 			last_sync_id: 0,
-			latency: 0
-		}
+			latency: 0,
+		};
 
-        // Room information
-        this.room = {
-            id: null,
-            name: null,
-            address: null,
-            server: this.server,
-            bypass: this.bypass,
-            teamsLocked: false,
-            password: null,
+		// Room information
+		this.room = {
+			id: null,
+			name: null,
+			address: null,
+			server: this.server,
+			bypass: this.bypass,
+			teamsLocked: false,
+			password: null,
 			countdown: false,
 
 			state: false,
@@ -127,323 +124,324 @@ class BonkBot {
 			stateID: false,
 			admin: false,
 			random: false,
-        };
+		};
 
-        // Game state
-        this.game = {
-            id: null,
-            host: null,
-            banned: false
-        };
+		// Game state
+		this.game = {
+			id: null,
+			host: null,
+			banned: false,
+		};
 
-        // Player tracking
-        this.players = new Map();
-    }
-
-    /**
-     * Initialize the bot
-     * @returns {Promise<BonkBot>} This bot instance
-     */
-    async init() {
-        logger.info('Initializing BonkBot');
-
-        try {
-            // Get authentication token if needed
-            if (!this.account.guest && !this.token) {
-                this.token = await this.getToken(this.account.username, this.account.password);
-            }
-
-            // Get server information if using default
-            if (!this.server || this.server === DEFAULT_SERVER) {
-				logger.info('Getting server information');
-                const serverInfo = await this.getServerInfo();
-                this.server = serverInfo.server;
-                
-                this.location = serverInfo;
-
-                this.room.server = this.server;
-                logger.info(`Using server: ${this.server}`);
-            }
-
-            logger.info('BonkBot initialized');
-            this.events.emit('ready');
-
-            return this;
-        } catch (error) {
-            logger.error('Failed to initialize BonkBot', error);
-            throw error;
-        }
-    }
+		// Player tracking
+		this.players = new Map();
+	}
 
 	/**
-     * Start the keep alive timer
-     * @private
-     */
-    startKeepAlive() {
-        this.keepAliveTimer = setInterval(() => {
-            if (this.connected) {
-                // Verify the socket is still connected before sending keep-alive
-                if (this.socket && this.socket.connected) {
-                    this.sendTimesync();
-                } else {
-                    logger.warn('Keep-alive detected disconnected socket');
-                    
-					this.stopBot();
-                    this.events.emit('disconnect');
-                }
-            }
-        }, 5000);
-    }
+	 * Initialize the bot
+	 * @returns {Promise<BonkBot>} This bot instance
+	 */
+	async init() {
+		logger.info('Initializing BonkBot');
 
-	/**
-     * Set the room address
-     * @param {Object} addressInfo - Room address information
-     */
-    setAddress(addressInfo) {
-        logger.info('Setting room address');
-
-        if (!addressInfo.address || !addressInfo.roomname || !addressInfo.server) {
-            throw new Error('Invalid room address information');
-        }
-
-        this.room.address = addressInfo.address;
-        this.room.name = addressInfo.roomname;
-        this.room.server = addressInfo.server;
-        this.room.bypass = addressInfo.bypass || '';
-
-        // Update server if different
-        if (this.server !== addressInfo.server) {
-            this.server = addressInfo.server;
-        }
-
-        logger.info(`Set room address: ${this.room.name} (${this.room.address})`);
-    }
-
-    /**
-     * Connect to the server
-     * @returns {Promise<BonkBot>} This bot instance
-     */
-    async connect() {
-        if (this.connected) {
-            logger.warn('Already connected, disconnecting first');
-            this.disconnect();
-        }
-
-        // Disable TLS certificate verification for bonk.io servers
-        // NOTE: This is required because bonk.io uses Sectigo certificates with incomplete chains
-        // and socket.io-client v2.x with engine.io-client v3.x doesn't properly pass
-        // rejectUnauthorized option to the underlying ws library
-        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
-        logger.info(`Connecting to server: ${this.server}`);
-
-        const socketAddr = `https://${this.server}.bonk.io`;
-
-        return new Promise((resolve, reject) => {
-            try {
-                // Configure socket.io options
-                const socketOptions = {
-                    transports: ['websocket'],
-                    reconnection: false,
-                    timeout: 10000,
-                    forceNew: true,
-                    path: '/socket.io',
-                    // NOTE: socket.io-client v2.x with engine.io-client v3.x has a bug where
-                    // custom CA certificates cannot be properly passed to the websocket transport.
-                    // As a workaround, we disable certificate verification for bonk.io servers
-                    // which use Sectigo certificates with incomplete chains.
-                    rejectUnauthorized: false
-                };
-
-                logger.info('Creating Socket.IO connection with certificate verification disabled');
-                this.socket = io(socketAddr, socketOptions);
-
-                // Set up connection timeout
-                const timeout = setTimeout(() => {
-                    if (!this.connected) {
-                        reject(new Error(`Connection timeout to server: ${this.server}`));
-                        this.stopBot();
-                    }
-                }, 10000);
-
-                // Connection opened
-                this.socket.on('connect', () => {
-                    logger.info('Socket.IO connection established');
-
-                    clearTimeout(timeout);
-                    this.connected = true;
-
-                    // Set up event handlers
-                    this.setupSocketEvents();
-
-                    // Start keep alive timer
-                    this.startKeepAlive();
-
-                    // Emit connect event
-                    this.events.emit('connect');
-
-                    resolve(this);
-                });
-
-                // Connection error
-                this.socket.on('connect_error', (error) => {
-                    logger.error('Socket.IO connection error:', error.message || error);
-
-                    if (!this.connected) {
-                        clearTimeout(timeout);
-                        const errorMsg = error.message || error.description?.message || 'Unknown error';
-                        reject(new Error(`Failed to connect to server: ${errorMsg}`));
-                    }
-
-                    this.events.emit('error', error);
-                });
-
-                // Connection error (fallback handler)
-                this.socket.on('error', (error) => {
-                    logger.error('Socket.IO error:', error.message || error);
-
-                    if (!this.connected) {
-                        clearTimeout(timeout);
-                        const errorMsg = error.message || error.description?.message || 'Unknown error';
-                        reject(new Error(`Failed to connect to server: ${errorMsg}`));
-                    }
-
-                    this.events.emit('error', error);
-                });
-
-                // Connection closed
-                this.socket.on('disconnect', (reason) => {
-                    logger.info(`Socket.IO connection closed: ${reason}`);
-
-                    if (!this.connected) {
-                        clearTimeout(timeout);
-                        reject(new Error(`Connection closed before fully established: ${reason}`));
-                    }
-
-                    this.stopBot();
-                    this.events.emit('disconnect');
-                });
-            } catch (error) {
-                reject(new Error(`Failed to create Socket.IO connection: ${error.message}`));
-            }
-        });
-    }
-
-    /**
-     * Disconnect from the server
-     */
-    disconnect() {
-        if (!this.connected) {
-            logger.warn('Not connected, nothing to disconnect');
-            return;
-        }
-
-        logger.info('Disconnecting from server');
-
-        this.stopBot();
-
-        if (this.socket) {
-            this.socket.disconnect();
-            this.socket = null;
-        }
-        return true;
-    }
-
-
-    async getAddressFromUrl(url) {
-		const regex = /\/(\d{6})([a-zA-Z0-9]{5})?$/;
-		const match = url.match(regex);
-	  
-		if (!match) {
-		  return null;
-		}
-	  
-		const id = match[1];
-		const bypass = match[2] || "";
-	  
-		const data = new URLSearchParams();
-		data.append('joinID', id);
-	  
 		try {
-		  const response = await axios.post(API.AUTOJOIN, data.toString(), {
-			headers: {
-			  'Content-Type': 'application/x-www-form-urlencoded'
-			},
-			httpsAgent: httpsAgent
-		  });
-	  
-		  const result = response.data;
-		  
-		  if (result.r == "success") {
-			result.bypass = bypass;
-		  }
+			// Get authentication token if needed
+			if (!this.account.guest && !this.token) {
+				this.token = await this.getToken(this.account.username, this.account.password);
+			}
 
-		  return result;
+			// Get server information if using default
+			if (!this.server || this.server === DEFAULT_SERVER) {
+				logger.info('Getting server information');
+				const serverInfo = await this.getServerInfo();
+				this.server = serverInfo.server;
+
+				this.location = serverInfo;
+
+				this.room.server = this.server;
+				logger.info(`Using server: ${this.server}`);
+			}
+
+			logger.info('BonkBot initialized');
+			this.events.emit('ready');
+
+			return this;
 		} catch (error) {
-		  console.error('Error getting join link:', error);
-		  throw error; // Re-throw to allow caller to handle the error
+			logger.error('Failed to initialize BonkBot', error);
+			throw error;
 		}
 	}
 
-    /**
-     * Join a room
-     * @param {Object} [options] - Join options
-     * @returns {Promise<void>} Resolves when joined
-     */
-    async joinRoom(options = {}) {
-        if (!this.connected) {
-            throw new Error('Not connected to server');
-        }
+	/**
+	 * Start the keep alive timer
+	 * @private
+	 */
+	startKeepAlive() {
+		this.keepAliveTimer = setInterval(() => {
+			if (this.connected) {
+				// Verify the socket is still connected before sending keep-alive
+				if (this.socket && this.socket.connected) {
+					this.sendTimesync();
+				} else {
+					logger.warn('Keep-alive detected disconnected socket');
 
-        if (!this.room.address) {
-            throw new Error('Room address not set');
-        }
+					this.stopBot();
+					this.events.emit('disconnect');
+				}
+			}
+		}, 5000);
+	}
 
-        logger.info(`Joining room: ${this.room.name} (${this.room.address})`);
+	/**
+	 * Set the room address
+	 * @param {Object} addressInfo - Room address information
+	 */
+	setAddress(addressInfo) {
+		logger.info('Setting room address');
 
-        // Prepare join data
-        const joinData = {
-            joinID: this.room.address,
-            roomPassword: options.password ? options.password.toString() : '',
-            guest: this.account.guest,
-            dbid: 2,
-            version: this.PROTOCOL_VERSION,
-            peerID: options.peerID || this.peerID,
-            bypass: this.room.bypass || '',
-            avatar: this.avatar
-        };
+		if (!addressInfo.address || !addressInfo.roomname || !addressInfo.server) {
+			throw new Error('Invalid room address information');
+		}
 
-        // Add account-specific data
-        if (this.account.guest) {
-            joinData.guestName = this.account.username;
-        } else {
-            joinData.token = this.token;
-        }
+		this.room.address = addressInfo.address;
+		this.room.name = addressInfo.roomname;
+		this.room.server = addressInfo.server;
+		this.room.bypass = addressInfo.bypass || '';
 
-        // Send join message
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.JOIN_ROOM, joinData);
+		// Update server if different
+		if (this.server !== addressInfo.server) {
+			this.server = addressInfo.server;
+		}
 
-        logger.info(`Join request sent for room: ${this.room.name}`);
-    }
+		logger.info(`Set room address: ${this.room.name} (${this.room.address})`);
+	}
 
-    /**
-     * Create a new room
-     * @param {Object} [options] - Room options
-     * @returns {Promise<Object>} Room address information
-     */
-    async createRoom(options = {}) {
-        if (!this.connected) {
-            throw new Error('Not connected to server');
-        }
+	/**
+	 * Connect to the server
+	 * @returns {Promise<BonkBot>} This bot instance
+	 */
+	async connect() {
+		if (this.connected) {
+			logger.warn('Already connected, disconnecting first');
+			this.disconnect();
+		}
 
-        logger.info('Creating new room');
+		// Disable TLS certificate verification for bonk.io servers
+		// NOTE: This is required because bonk.io uses Sectigo certificates with incomplete chains
+		// and socket.io-client v2.x with engine.io-client v3.x doesn't properly pass
+		// rejectUnauthorized option to the underlying ws library
+		process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-        // Set room info
-        this.room.name = options.roomname || `BonkBot Room ${Math.floor(Math.random() * 1000)}`;
-        this.room.maxPlayers = options.maxplayers || 8;
-        this.room.password = options.roompassword || '';
+		logger.info(`Connecting to server: ${this.server}`);
 
-        // Prepare create data
+		const socketAddr = `https://${this.server}.bonk.io`;
+
+		return new Promise((resolve, reject) => {
+			try {
+				// Configure socket.io options
+				const socketOptions = {
+					transports: ['websocket'],
+					reconnection: false,
+					timeout: 10000,
+					forceNew: true,
+					path: '/socket.io',
+					// NOTE: socket.io-client v2.x with engine.io-client v3.x has a bug where
+					// custom CA certificates cannot be properly passed to the websocket transport.
+					// As a workaround, we disable certificate verification for bonk.io servers
+					// which use Sectigo certificates with incomplete chains.
+					rejectUnauthorized: false,
+				};
+
+				logger.info('Creating Socket.IO connection with certificate verification disabled');
+				this.socket = io(socketAddr, socketOptions);
+
+				// Set up connection timeout
+				const timeout = setTimeout(() => {
+					if (!this.connected) {
+						reject(new Error(`Connection timeout to server: ${this.server}`));
+						this.stopBot();
+					}
+				}, 10000);
+
+				// Connection opened
+				this.socket.on('connect', () => {
+					logger.info('Socket.IO connection established');
+
+					clearTimeout(timeout);
+					this.connected = true;
+
+					// Set up event handlers
+					this.setupSocketEvents();
+
+					// Start keep alive timer
+					this.startKeepAlive();
+
+					// Emit connect event
+					this.events.emit('connect');
+
+					resolve(this);
+				});
+
+				// Connection error
+				this.socket.on('connect_error', (error) => {
+					logger.error('Socket.IO connection error:', error.message || error);
+
+					if (!this.connected) {
+						clearTimeout(timeout);
+						const errorMsg =
+							error.message || error.description?.message || 'Unknown error';
+						reject(new Error(`Failed to connect to server: ${errorMsg}`));
+					}
+
+					this.events.emit('error', error);
+				});
+
+				// Connection error (fallback handler)
+				this.socket.on('error', (error) => {
+					logger.error('Socket.IO error:', error.message || error);
+
+					if (!this.connected) {
+						clearTimeout(timeout);
+						const errorMsg =
+							error.message || error.description?.message || 'Unknown error';
+						reject(new Error(`Failed to connect to server: ${errorMsg}`));
+					}
+
+					this.events.emit('error', error);
+				});
+
+				// Connection closed
+				this.socket.on('disconnect', (reason) => {
+					logger.info(`Socket.IO connection closed: ${reason}`);
+
+					if (!this.connected) {
+						clearTimeout(timeout);
+						reject(new Error(`Connection closed before fully established: ${reason}`));
+					}
+
+					this.stopBot();
+					this.events.emit('disconnect');
+				});
+			} catch (error) {
+				reject(new Error(`Failed to create Socket.IO connection: ${error.message}`));
+			}
+		});
+	}
+
+	/**
+	 * Disconnect from the server
+	 */
+	disconnect() {
+		if (!this.connected) {
+			logger.warn('Not connected, nothing to disconnect');
+			return;
+		}
+
+		logger.info('Disconnecting from server');
+
+		this.stopBot();
+
+		if (this.socket) {
+			this.socket.disconnect();
+			this.socket = null;
+		}
+		return true;
+	}
+
+	async getAddressFromUrl(url) {
+		const regex = /\/(\d{6})([a-zA-Z0-9]{5})?$/;
+		const match = url.match(regex);
+
+		if (!match) {
+			return null;
+		}
+
+		const id = match[1];
+		const bypass = match[2] || '';
+
+		const data = new URLSearchParams();
+		data.append('joinID', id);
+
+		try {
+			const response = await axios.post(API.AUTOJOIN, data.toString(), {
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				httpsAgent: httpsAgent,
+			});
+
+			const result = response.data;
+
+			if (result.r == 'success') {
+				result.bypass = bypass;
+			}
+
+			return result;
+		} catch (error) {
+			console.error('Error getting join link:', error);
+			throw error; // Re-throw to allow caller to handle the error
+		}
+	}
+
+	/**
+	 * Join a room
+	 * @param {Object} [options] - Join options
+	 * @returns {Promise<void>} Resolves when joined
+	 */
+	async joinRoom(options = {}) {
+		if (!this.connected) {
+			throw new Error('Not connected to server');
+		}
+
+		if (!this.room.address) {
+			throw new Error('Room address not set');
+		}
+
+		logger.info(`Joining room: ${this.room.name} (${this.room.address})`);
+
+		// Prepare join data
+		const joinData = {
+			joinID: this.room.address,
+			roomPassword: options.password ? options.password.toString() : '',
+			guest: this.account.guest,
+			dbid: 2,
+			version: this.PROTOCOL_VERSION,
+			peerID: options.peerID || this.peerID,
+			bypass: this.room.bypass || '',
+			avatar: this.avatar,
+		};
+
+		// Add account-specific data
+		if (this.account.guest) {
+			joinData.guestName = this.account.username;
+		} else {
+			joinData.token = this.token;
+		}
+
+		// Send join message
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.JOIN_ROOM, joinData);
+
+		logger.info(`Join request sent for room: ${this.room.name}`);
+	}
+
+	/**
+	 * Create a new room
+	 * @param {Object} [options] - Room options
+	 * @returns {Promise<Object>} Room address information
+	 */
+	async createRoom(options = {}) {
+		if (!this.connected) {
+			throw new Error('Not connected to server');
+		}
+
+		logger.info('Creating new room');
+
+		// Set room info
+		this.room.name = options.roomname || `BonkBot Room ${Math.floor(Math.random() * 1000)}`;
+		this.room.maxPlayers = options.maxplayers || 8;
+		this.room.password = options.roompassword || '';
+
+		// Prepare create data
 		const createData = {
 			peerID: options.peerID ?? this.peerID,
 			roomName: options.roomName ?? this.room.name,
@@ -463,12 +461,12 @@ class BonkBot {
 			token: options.token ?? (this.token || ''),
 			avatar: options.avatar ?? this.avatar,
 		};
-		if(createData.guest){
+		if (createData.guest) {
 			createData.guestName = this.account.username;
 		}
 
-        // Send create message
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.CREATE_ROOM, createData);
+		// Send create message
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.CREATE_ROOM, createData);
 
 		// set the only player to yorself
 		this.players.set(0, {
@@ -489,34 +487,34 @@ class BonkBot {
 			movement: {
 				input: 0,
 				frame: 0,
-				sequence: 0
-			}
+				sequence: 0,
+			},
 		});
 
-		this.game.id = 0
-		this.game.host = 0
+		this.game.id = 0;
+		this.game.host = 0;
 
-        logger.info(`Room creation request sent: ${this.room.name}`);
+		logger.info(`Room creation request sent: ${this.room.name}`);
 
 		this.events.emit('CREATE_ROOM');
 
-        // Return room info
-        return {
-            address: this.room.address,
-            roomname: this.room.name,
-            server: this.room.server,
-            bypass: this.room.bypass
-        };
-    }
+		// Return room info
+		return {
+			address: this.room.address,
+			roomname: this.room.name,
+			server: this.room.server,
+			bypass: this.room.bypass,
+		};
+	}
 
-    /**
-     * Get a player by ID
-     * @param {string|number} id - Player ID
-     * @returns {Object|null} Player object or null if not found
-     */
-    getPlayerByID(id) {
-        return this.players.get(id) || null;
-    }
+	/**
+	 * Get a player by ID
+	 * @param {string|number} id - Player ID
+	 * @returns {Object|null} Player object or null if not found
+	 */
+	getPlayerByID(id) {
+		return this.players.get(id) || null;
+	}
 
 	/**
 	 * Get a players id by username
@@ -534,33 +532,30 @@ class BonkBot {
 		return -1;
 	}
 
-    /**
-     * Get all players
-     * @returns {Array<Object>} Array of player objects
-     */
-    getAllPlayers() {
-        const players = [];
+	/**
+	 * Get all players
+	 * @returns {Array<Object>} Array of player objects
+	 */
+	getAllPlayers() {
+		const players = [];
 
-        for (const player of this.players.values()) {
-            players.push(player);
-        }
+		for (const player of this.players.values()) {
+			players.push(player);
+		}
 
-        return players;
-    }
+		return players;
+	}
 
-    
-
-    /**
-     * Automatically handle a packet
-     * @param {Object} packet - Packet to handle
-     */
-    async autoHandlePacket(packet) {
-        switch (packet.type) {
-
+	/**
+	 * Automatically handle a packet
+	 * @param {Object} packet - Packet to handle
+	 */
+	async autoHandlePacket(packet) {
+		switch (packet.type) {
 			case 'ROOM_SHARE_LINK':
 				this.room.dbid = packet.roomId;
 				this.room.bypass = packet.roomBypass;
-				
+
 				this.events.emit('ROOM_SHARE_LINK', { url: this.getShareLink() });
 				break;
 
@@ -573,8 +568,8 @@ class BonkBot {
 				const mapSuggestion = {
 					title: packet.maptitle,
 					author: packet.mapauthor,
-					player: this.players.get(packet.id)
-				}
+					player: this.players.get(packet.id),
+				};
 				this.events.emit('MAP_SUGGEST', mapSuggestion);
 				break;
 
@@ -582,7 +577,7 @@ class BonkBot {
 				this.room.rounds = packet.rounds;
 				this.events.emit('CHANGE_ROUNDS', { rounds: packet.rounds });
 				break;
-			
+
 			case 'COUNTDOWN':
 				this.room.countdown = packet.countdown;
 				this.events.emit('COUNTDOWN', { countdown: packet.countdown });
@@ -595,7 +590,7 @@ class BonkBot {
 				this.room.inGame = true;
 				this.room.roundStartTime = packet.timestamp;
 				this.room.state = packet.state;
-				
+
 				this.room.map = packet.state.map;
 				this.room.gt = packet.state.gt;
 				this.room.rounds = packet.state.wl;
@@ -604,7 +599,7 @@ class BonkBot {
 				this.room.teams = packet.state.tea;
 				this.room.engine = ENGINE_NAMES[packet.state.ga];
 				this.room.mode = GAMEMODE_NAMES[packet.state.mo];
-				
+
 				// apply balances to all the players
 				// bal[playerid] = num
 				this.players.forEach((player) => {
@@ -624,7 +619,10 @@ class BonkBot {
 				this.room.mode = GAMEMODE_NAMES[packet.mode];
 				this.room.engine = ENGINE_NAMES[packet.engine];
 
-				this.events.emit('GAMEMODE_CHANGE', { mode: this.room.mode, engine: this.room.engine });
+				this.events.emit('GAMEMODE_CHANGE', {
+					mode: this.room.mode,
+					engine: this.room.engine,
+				});
 				break;
 
 			case 'BALANCE_SET':
@@ -654,7 +652,6 @@ class BonkBot {
 					this.players.set(packet.id, playerTeam);
 				}
 
-				// Emit team change event
 				this.events.emit('TEAM_CHANGE', { player: playerTeam, team: packet.team });
 				break;
 
@@ -662,13 +659,13 @@ class BonkBot {
 				// Update player pings
 				// pings: { '0': 14 }
 				for (let [id, ping] of Object.entries(packet.pings)) {
-					id = parseInt(id)
+					id = parseInt(id);
 					const playerPing = this.players.get(id);
 					playerPing.ping = ping;
 					this.players.set(id, playerPing);
 				}
 
-				await this.sendMessage(CLIENT_MESSAGE_TYPES.PING_RESPONSE, { id: packet.pingId })
+				await this.sendMessage(CLIENT_MESSAGE_TYPES.PING_RESPONSE, { id: packet.pingId });
 				break;
 
 			case 'CHAT_MESSAGE':
@@ -678,51 +675,53 @@ class BonkBot {
 				this.events.emit('CHAT_MESSAGE', { player: player, message: packet.message });
 				break;
 
-            case 'JOIN_ROOM':
-                // Set game info
-                this.game.id = packet.myid;
-                this.game.host = packet.hostid;
+			case 'JOIN_ROOM':
+				// Set game info
+				this.game.id = packet.myid;
+				this.game.host = packet.hostid;
 				// Set room info
-                this.room.id = packet.roomid;
-                this.room.bypass = packet.roombypass;
-                this.room.teamsLocked = packet.teamsLocked;
+				this.room.id = packet.roomid;
+				this.room.bypass = packet.roombypass;
+				this.room.teamsLocked = packet.teamsLocked;
 
-                // Add players
-                if (packet.playerdata && Array.isArray(packet.playerdata)) {
-                    for (let i = 0; i < packet.playerdata.length; i++) {
-                        const playerData = packet.playerdata[i];
-                        if (playerData) {
-                            playerData.id = i;
+				// Add players
+				if (packet.playerdata && Array.isArray(packet.playerdata)) {
+					for (let i = 0; i < packet.playerdata.length; i++) {
+						const playerData = packet.playerdata[i];
+						if (playerData) {
+							playerData.id = i;
 
-                            playerData.username = playerData.userName;
-                            delete playerData.userName;
+							playerData.username = playerData.userName;
+							delete playerData.userName;
 
-                            playerData.xp = this.levelToXP(playerData.level)
+							playerData.xp = this.levelToXP(playerData.level);
 							playerData.ping = 0;
 							playerData.balance = 0;
 							playerData.movement = {
 								input: 0,
 								frame: 0,
-								sequence: 0
-							}
+								sequence: 0,
+							};
 
-                            this.players.set(i, playerData);
-                        }
-                    }
-                }
+							this.players.set(i, playerData);
+						}
+					}
+				}
 
 				packet.players = this.players;
 				delete packet.playerdata;
 
-                // Emit join event
-                this.events.emit('JOIN', { game: this.game, room: this.room, players: this.players });
-                break;
+				this.events.emit('JOIN', {
+					game: this.game,
+					room: this.room,
+					players: this.players,
+				});
+				break;
 
 			case 'INITIAL_DATA':
-
 				this.room.engine = ENGINE_NAMES[packet.ga];
 				this.room.mode = GAMEMODE_NAMES[packet.mo];
-				
+
 				this.room.gt = packet.gt;
 				this.room.rounds = packet.wl;
 				this.room.quickplay = packet.q;
@@ -743,19 +742,18 @@ class BonkBot {
 				});
 				break;
 
-            case 'PLAYER_JOIN':
-                // Add player
-                this.players.set(packet.id, {
-                    peerID: packet.peerID,
-                    guest: packet.guest,
+			case 'PLAYER_JOIN':
+				this.players.set(packet.id, {
+					peerID: packet.peerID,
+					guest: packet.guest,
 					team: 1,
 					teamName: TEAM_NAMES[1],
-                    level: parseInt(packet.level),
-                    ready: false,
-                    tabbed: false,
-                    avatar: packet.avatar,
-                    id: packet.id,
-                    username: packet.username,
+					level: parseInt(packet.level),
+					ready: false,
+					tabbed: false,
+					avatar: packet.avatar,
+					id: packet.id,
+					username: packet.username,
 					xp: this.levelToXP(packet.level),
 					ping: 0,
 					balance: 0,
@@ -763,9 +761,9 @@ class BonkBot {
 					movement: {
 						input: 0,
 						frame: 0,
-						sequence: 0
-					}
-                });
+						sequence: 0,
+					},
+				});
 
 				// check if the bot is host
 				const botPlayer = this.players.get(this.game.id);
@@ -780,7 +778,7 @@ class BonkBot {
 									nc: false,
 									pq: 1,
 									gd: 25,
-									fl: false
+									fl: false,
 								},
 								physics: {
 									shapes: [],
@@ -788,60 +786,60 @@ class BonkBot {
 									bodies: [],
 									bro: [],
 									joints: [],
-									ppm: 12
+									ppm: 12,
 								},
 								spawns: [],
 								capZones: [],
 								m: {
-									a: "BonkBot",
-									n: "Empty Map",
+									a: 'BonkBot',
+									n: 'Empty Map',
 									dbv: 2,
 									dbid: 767645,
 									authid: -1,
-									date: "",
+									date: '',
 									rxid: 0,
-									rxn: "",
-									rxa: "",
+									rxn: '',
+									rxa: '',
 									rxdb: 1,
-									cr: ["uint32"],
+									cr: ['uint32'],
 									pub: true,
-									mo: ""
-								}
+									mo: '',
+								},
 							},
 							gt: this.room.gt || 2,
 							wl: this.room.rounds || 3,
 							q: this.room.quickplay || false,
 							tl: this.room.teamsLocked || false,
 							tea: this.room.teams || false,
-							ga: "b",
-							mo: "b",
+							ga: 'b',
+							mo: 'b',
 							bal: this.getAllPlayers().reduce((balances, player) => {
 								if (player.balance) {
 									balances[player.id] = player.balance;
 								}
 								return balances;
-							}, {})
-						}
+							}, {}),
+						},
 					});
 				}
 
-				// Emit join event
-				this.events.emit('PLAYER_JOIN', { player: this.players.get(packet.id), id: packet.id });
-                break;
+				this.events.emit('PLAYER_JOIN', {
+					player: this.players.get(packet.id),
+					id: packet.id,
+				});
+				break;
 
-            case 'PLAYER_LEAVE':
+			case 'PLAYER_LEAVE':
 				const deletedPlayer = this.players.get(packet.id);
 
-                // delete player
-                this.players.delete(packet.id);
+				this.players.delete(packet.id);
 
-				// Emit leave event
 				this.events.emit('PLAYER_LEAVE', { player: deletedPlayer, id: packet.id });
-                break;
+				break;
 
-            case 'HOST_TRANSFER':
-                // Update host
-                this.game.host = packet.newHost;
+			case 'HOST_TRANSFER':
+				// Update host
+				this.game.host = packet.newHost;
 
 				// find the player that is now host
 				this.players.forEach((player) => {
@@ -853,75 +851,70 @@ class BonkBot {
 					this.players.set(player.id, player);
 				});
 
-				// Emit host transfer event
-				this.events.emit('HOST_TRANSFER', { oldHost: packet.oldHost, newHost: packet.newHost });
-                break;
+				this.events.emit('HOST_TRANSFER', {
+					oldHost: packet.oldHost,
+					newHost: packet.newHost,
+				});
+				break;
 
-            case 'READY_CHANGE':
-                // Update player ready status
-                const playerReady = this.players.get(packet.id);
+			case 'READY_CHANGE':
+				// Update player ready status
+				const playerReady = this.players.get(packet.id);
 
-                if (playerReady) {
-                    playerReady.ready = packet.ready;
+				if (playerReady) {
+					playerReady.ready = packet.ready;
 
 					this.players.set(packet.id, playerReady);
-                }
+				}
 
 				// Emit ready change event
 				this.events.emit('READY_CHANGE', { player: playerReady, ready: packet.ready });
-                break;
+				break;
 
-            case 'TEAMLOCK_TOGGLE':
-                // Update teams lock
-                this.room.teamsLocked = packet.teamsLocked;
+			case 'TEAMLOCK_TOGGLE':
+				this.room.teamsLocked = packet.teamsLocked;
 
-				// Emit teams lock event
 				this.events.emit('TEAMLOCK_TOGGLE', { teamsLocked: packet.teamsLocked });
-                break;
+				break;
 
-            case 'PLAYER_TABBED':
-                // Update player tabbed status
-                const playerTabbed = this.players.get(packet.id);
+			case 'PLAYER_TABBED':
+				const playerTabbed = this.players.get(packet.id);
 
-                if (playerTabbed) {
-                    playerTabbed.tabbed = packet.tabbed;
+				if (playerTabbed) {
+					playerTabbed.tabbed = packet.tabbed;
 
 					this.players.set(packet.id, playerTabbed);
-                }
+				}
 
-				// Emit tabbed event
 				this.events.emit('PLAYER_TABBED', { player: playerTabbed, tabbed: packet.tabbed });
-                break;
+				break;
 
-            case 'ROOM_NAME_UPDATE':
-                // Update room name
-                this.room.name = packet.name;
+			case 'ROOM_NAME_UPDATE':
+				// Update room name
+				this.room.name = packet.name;
 
-				// Emit room name change event
 				this.events.emit('ROOM_NAME_UPDATE', { name: packet.name });
-                break;
+				break;
 
 			case 'ROOM_ADDRESS':
 				// Update room address
 				this.room.address = packet.address;
 
-				// Emit room address event
 				this.events.emit('ROOM_ADDRESS', { address: packet.address });
 				break;
 
-            case 'PLAYER_KICK':
-                // Check if we were kicked
-                if (packet.id === this.game.id) {
-                    this.game.banned = true; // might not act be banned
-                }
+			case 'PLAYER_KICK':
+				// Check if we were kicked
+				if (packet.id === this.game.id) {
+					this.game.banned = true; // might not act be banned
+				}
 
 				// Remove player
 				const kickedPlayer = this.players.get(packet.id);
 				this.players.delete(packet.id);
 
-				// Emit kick event
 				this.events.emit('PLAYER_KICK', kickedPlayer);
-                break;
+				break;
 
 			case 'PLAYER_INPUT':
 				// Handle player input
@@ -931,567 +924,553 @@ class BonkBot {
 					playerInput.movement = {
 						input: packet.input,
 						frame: packet.frame,
-						sequence: packet.sequence
-					}
+						sequence: packet.sequence,
+					};
 
 					this.players.set(packet.id, playerInput);
 				}
 
-				// Emit player input event
-				this.events.emit('PLAYER_INPUT', { player: playerInput, movement: playerInput.movement });
+				this.events.emit('PLAYER_INPUT', {
+					player: playerInput,
+					movement: playerInput.movement,
+				});
 				break;
 
-
-            default:
-                logger.debug(`No handler for packet type: ${packet.type}. Tell the developer about this for a fix!\nhttps://github.com/PixelMelt/BonkBot`, packet);
-                break;
-        }
-    }
-
-    /**
-     * Validate account information
-     * @private
-     * @param {Object} account - Account information
-     * @returns {Object} Validated account information
-     */
-    validateAccount(account) {
-        // Default to guest account
-        const validatedAccount = {
-            guest: true,
-            username: `BonkBot${Math.floor(Math.random() * 10000)}`
-        };
-
-        // Override with provided values
-        if (account.guest !== undefined) {
-            validatedAccount.guest = !!account.guest;
-        }
-
-        if (account.username) {
-            validatedAccount.username = account.username;
-        }
-
-        if (account.password) {
-            validatedAccount.password = account.password;
-        }
-
-        // Non-guest accounts must have a password
-        if (!validatedAccount.guest && !validatedAccount.password) {
-            logger.warn('Non-guest account must have a password, defaulting to guest');
-            validatedAccount.guest = true;
-        }
-
-        return validatedAccount;
-    }
-
-    /**
-     * Generate a random peer ID
-     * @private
-     * @returns {string} Random peer ID
-     */
-    generatePeerId() {
-        return Math.random().toString(36).substr(2, 10) + 'v00000';
-    }
-
-    /**
-     * Get authentication token
-     * @private
-     * @param {string} username - Username
-     * @param {string} password - Password
-     * @returns {Promise<string>} Authentication token
-     */
-    async getToken(username, password) {
-        try {
-            logger.info(`Getting token for user: ${username}`);
-
-            const response = await axios.post(API.LOGIN,
-                `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&remember=true`, {
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    httpsAgent: httpsAgent
-                }
-            );
-
-            if (!response.data || !response.data.token) {
-                throw new Error('Failed to get authentication token');
-            }
-
-            logger.info('Successfully obtained authentication token');
-            return response.data.token;
-        } catch (error) {
-            logger.error('Failed to authenticate', error);
-            throw new Error(`Failed to authenticate: ${error.message}`);
-        }
-    }
-
-    /**
-     * Get a room address from a room name
-     * @param {string} roomName - Room name
-     * @returns {Promise<Object>} Room address information
-     */
-    async getAddressFromRoomName(roomName) {
-        logger.info(`Getting address for room: ${roomName}`);
-
-        try {
-            // Find room by name
-            const room = await this.getRoomByName(roomName, this.token);
-
-            if (!room) {
-                throw new Error(`Room not found: ${roomName}`);
-            }
-
-            // Get room address
-            const address = await this.getRoomAddress(room.id);
-
-            const result = {
-                roomname: room.roomname,
-                address: address.address,
-                server: address.server,
-                bypass: ''
-            };
-
-            logger.info(`Got address for room: ${roomName}`);
-
-            return result;
-        } catch (error) {
-            logger.error(`Failed to get address for room: ${roomName}`, error);
-            throw error;
-        }
-    }
-
-    /**
-     * Get server information
-     * @private
-     * @param {string} [token] - Authentication token
-     * @returns {Promise<Object>} Server information
-     */
-    async getServerInfo() {
-        try {
-            const response = await axios.post(API.GET_ROOMS,
-                `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token ?? ""}`, {
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    httpsAgent: httpsAgent
-                }
-            );
-
-            if (!response.data || !response.data.createserver) {
-                throw new Error('Failed to get server information');
-            }
-
-            return {
-                server: response.data.createserver,
-                lat: response.data.lat,
-                long: response.data.long,
-                country: response.data.country
-            };
-        } catch (error) {
-            logger.error(error);
-            throw new Error(`Failed to get server information: ${error.message}`);
-        }
-    }
-
-    /**
-     * Get list of rooms
-     * @private
-     * @returns {Promise<Array>} List of rooms
-     */
-    async getRooms() {
-        try {
-            logger.info('Getting list of rooms');
-
-            const response = await axios.post(API.GET_ROOMS,
-                `version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token || ""}`, {
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    httpsAgent: httpsAgent
-                }
-            );
-
-            if (!response.data || !response.data.rooms) {
-                throw new Error('Failed to get rooms');
-            }
-
-            logger.info(`Retrieved ${response.data.rooms.length} rooms`);
-            return response.data.rooms;
-        } catch (error) {
-            logger.error('Failed to get rooms', error);
-            throw new Error(`Failed to get rooms: ${error.message}`);
-        }
-    }
-
-    /**
-     * Change game mode
-     * @param {string} mode - Game mode ('b' = classic, 'ar' = arrows, 'ard' = death arrows, 'sp' = grapple, 'v' = vtol, 'f' = football)
-     * @param {string} engine - Game engine ('b' = bonk, 'f' = football)
-    */
-    async setGameMode(mode, engine = 'b') {
-        this.checkConnection();
-        
-        // Validar modo
-        const validModes = ['b', 'ar', 'ard', 'sp', 'v', 'f'];
-        const validEngines = ['b', 'f'];
-        
-        if (!validModes.includes(mode)) {
-            throw new Error(`Invalid mode. Valid modes: ${validModes.join(', ')}`);
-        }
-        
-        if (!validEngines.includes(engine)) {
-            throw new Error(`Invalid engine. Valid engines: ${validEngines.join(', ')}`);
-        }
-        
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_MODE, {
-            ga: engine,
-            mo: mode
-        });
-        
-        logger.info(`Game mode changed to: ${GAMEMODE_NAMES[mode]} (${ENGINE_NAMES[engine]})`);
-    }
-
-    /**
-    * Set Football mode
-    */
-    async setFootballMode() {
-        await this.setGameMode('f', 'f');
-    }
-
-    /**
-    * Set Classic mode
-    */
-    async setClassicMode() {
-        await this.setGameMode('b', 'b');
-    }
-
-    /**
-    * Set Arrows mode
-    */
-    async setArrowsMode() {
-        await this.setGameMode('ar', 'b');
-    }
-
-    /**
-    * Set Death Arrows mode
-    */
-    async setDeathArrowsMode() {
-        await this.setGameMode('ard', 'b');
-    }
-
-    /**
-    * Set Grapple mode
-    */
-    async setGrappleMode() {
-        await this.setGameMode('sp', 'b');
-    }
-
-    /**
-    * Set VTOL mode
-    */
-    async setVTOLMode() {
-        await this.setGameMode('v', 'b');
-    }
-
-    /**
-     * Get room by name
-     * @private
-     * @param {string} roomName - Room name
-     * @returns {Promise<Object|null>} Room object or null if not found
-     */
-    async getRoomByName(roomName) {
-        try {
-            logger.info(`Searching for room: ${roomName}`);
-
-            const rooms = await this.getRooms(this.token);
-
-            for (const room of rooms) {
-                if (room.roomname === roomName) {
-                    logger.info(`Found room: ${roomName}`);
-                    return room;
-                }
-            }
-
-            logger.info(`Room not found: ${roomName}`);
-            return null;
-        } catch (error) {
-            logger.error(`Failed to find room: ${roomName}`, error);
-            throw new Error(`Failed to find room: ${error.message}`);
-        }
-    }
-
-    /**
-     * Get room address
-     * @private
-     * @param {string} id - Room ID
-     * @returns {Promise<Object>} Room address
-     */
-    async getRoomAddress(id) {
-        try {
-            logger.info(`Getting address for room ID: ${id}`);
-
-            const response = await axios.post(API.GET_ROOM_ADDRESS,
-                `id=${id}`, {
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    httpsAgent: httpsAgent
-                }
-            );
-
-            if (!response.data || !response.data.address) {
-                throw new Error('Failed to get room address');
-            }
-
-            logger.info(`Retrieved address for room ID: ${id}`);
-            return response.data;
-        } catch (error) {
-            logger.error(`Failed to get address for room ID: ${id}`, error);
-            throw new Error(`Failed to get room address: ${error.message}`);
-        }
-    }
-
-    /**
-     * Set up socket event handlers
-     * @private
-     */
-    setupSocketEvents() {
-        // Register listeners for all message types we care about
-        Object.values(SERVER_MESSAGE_TYPES).forEach(eventId => {
-            this.socket.on(eventId, (...args) => {
-                // Create a packet array with event ID as first element and args as the rest
-                const packet = [eventId, ...args];
-
-                // Process the packet
-                const parsedPacket = parsePacket(packet);
-
-
-                // Emit events
-                this.events.emit('PACKET', parsedPacket);
-
-                // logger.debug(`Received event ${eventId}`, parsedPacket);
-            });
-        });
-
-        // Handle standard Socket.IO events
-        this.socket.on('connect', () => {
-            this.events.emit('connect');
-        });
-
-        this.socket.on('disconnect', (reason) => {
-            this.events.emit('disconnect', reason);
-        });
-
-        this.socket.on('error', (error) => {
-            this.events.emit('error', error);
-        });
-    }
-
-
-    /**
-     * Send a message to the server using Socket.IO v2 protocol
-     * @private
-     * @param {number} eventId - Event ID from CLIENT_MESSAGE_TYPES
-     * @param {any} data - Message data
-     */
-    async sendMessage(eventId, data) {
-        this.checkConnection()
-
-        // if(eventId != 18 && eventId != 1){ // just for pix to not get annoyed by things
-        // }
-        logger.debug(`Sending message type ${eventId}`, data);
-
-        // For Socket.IO v2, we need to emit to the 'message' event with the event ID and data
-        // The server expects a message in the format: [eventId, data]
-        await this.socket.emit(eventId, data);
-        return true
-    }
-
-
-
-
-    /**
-     * 
-     * User callable methods (the bot api)
-     * 
-     */
-
-
-
-
-
-
-
-    /**
-     * Clean up resources
-     * @private
-     */
-    stopBot() {
-        this.connected = false;
-
-        if (this.keepAliveTimer) {
-            clearInterval(this.keepAliveTimer);
-            this.keepAliveTimer = null;
-        }
-        return true;
-    }
-
-    getShareLink(){
-		return "https://bonk.io/" + this.room.dbid + this.room.bypass;
+			default:
+				logger.debug(
+					`No handler for packet type: ${packet.type}. Tell the developer about this for a fix!\nhttps://github.com/PixelMelt/BonkBot`,
+					packet,
+				);
+				break;
+		}
 	}
 
+	/**
+	 * Validate account information
+	 * @private
+	 * @param {Object} account - Account information
+	 * @returns {Object} Validated account information
+	 */
+	validateAccount(account) {
+		// Default to guest account
+		const validatedAccount = {
+			guest: true,
+			username: `BonkBot${Math.floor(Math.random() * 10000)}`,
+		};
 
+		// Override with provided values
+		if (account.guest !== undefined) {
+			validatedAccount.guest = !!account.guest;
+		}
 
+		if (account.username) {
+			validatedAccount.username = account.username;
+		}
 
+		if (account.password) {
+			validatedAccount.password = account.password;
+		}
 
-    /**
-     * Send a chat message
-     * @param {string} message - Message to send
-     */
-    async chat(message) {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.CHAT_MESSAGE, {
-            message
-        });
-    }
+		// Non-guest accounts must have a password
+		if (!validatedAccount.guest && !validatedAccount.password) {
+			logger.warn('Non-guest account must have a password, defaulting to guest');
+			validatedAccount.guest = true;
+		}
 
-    /**
-     * Set player ready status
-     * @param {boolean} ready - Ready status
-     */
-    async ready(ready) {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.SET_READY, {
-            ready
-        });
-    }
+		return validatedAccount;
+	}
 
-    /**
-     * Join a team
-     * @param {number} team - Team to join
-     */
-    async joinTeam(team) {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.CHANGE_OWN_TEAM, {
-            targetTeam: team
-        });
-    }
+	/**
+	 * Generate a random peer ID
+	 * @private
+	 * @returns {string} Random peer ID
+	 */
+	generatePeerId() {
+		return Math.random().toString(36).substr(2, 10) + 'v00000';
+	}
 
-    /**
-     * Toggle teams lock
-     * @param {boolean} locked - Whether teams are locked
-     */
-    async toggleTeams(locked) {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.TEAM_LOCK, {
-            teamLock: locked
-        });
-    }
+	/**
+	 * Get authentication token
+	 * @private
+	 * @param {string} username - Username
+	 * @param {string} password - Password
+	 * @returns {Promise<string>} Authentication token
+	 */
+	async getToken(username, password) {
+		try {
+			logger.info(`Getting token for user: ${username}`);
 
-    /**
-     * Ban a player
-     * @param {string|number} playerId - Player ID to ban
-     */
-    async banPlayer(playerId) {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.KICK_BAN_PLAYER, {
-            banshortid: playerId
-        });
-    }
+			const response = await axios.post(
+				API.LOGIN,
+				`username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&remember=true`,
+				{
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					httpsAgent: httpsAgent,
+				},
+			);
 
-    /**
-     * Leave the game
-     */
-    async leaveGame() {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.RETURN_TO_LOBBY);
-    }
+			if (!response.data || !response.data.token) {
+				throw new Error('Failed to get authentication token');
+			}
 
-    /**
-     * Give host to another player
-     * @param {string|number} playerId - Player ID to give host to
-     */
-    async giveHost(playerId) {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_HOST_CHANGE, {
-            id: playerId
-        });
-    }
+			logger.info('Successfully obtained authentication token');
+			return response.data.token;
+		} catch (error) {
+			logger.error('Failed to authenticate', error);
+			throw new Error(`Failed to authenticate: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Get a room address from a room name
+	 * @param {string} roomName - Room name
+	 * @returns {Promise<Object>} Room address information
+	 */
+	async getAddressFromRoomName(roomName) {
+		logger.info(`Getting address for room: ${roomName}`);
+
+		try {
+			// Find room by name
+			const room = await this.getRoomByName(roomName, this.token);
+
+			if (!room) {
+				throw new Error(`Room not found: ${roomName}`);
+			}
+
+			// Get room address
+			const address = await this.getRoomAddress(room.id);
+
+			const result = {
+				roomname: room.roomname,
+				address: address.address,
+				server: address.server,
+				bypass: '',
+			};
+
+			logger.info(`Got address for room: ${roomName}`);
+
+			return result;
+		} catch (error) {
+			logger.error(`Failed to get address for room: ${roomName}`, error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Get server information
+	 * @private
+	 * @param {string} [token] - Authentication token
+	 * @returns {Promise<Object>} Server information
+	 */
+	async getServerInfo() {
+		try {
+			const response = await axios.post(
+				API.GET_ROOMS,
+				`version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token ?? ''}`,
+				{
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					httpsAgent: httpsAgent,
+				},
+			);
+
+			if (!response.data || !response.data.createserver) {
+				throw new Error('Failed to get server information');
+			}
+
+			return {
+				server: response.data.createserver,
+				lat: response.data.lat,
+				long: response.data.long,
+				country: response.data.country,
+			};
+		} catch (error) {
+			logger.error(error);
+			throw new Error(`Failed to get server information: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Get list of rooms
+	 * @private
+	 * @returns {Promise<Array>} List of rooms
+	 */
+	async getRooms() {
+		try {
+			logger.info('Getting list of rooms');
+
+			const response = await axios.post(
+				API.GET_ROOMS,
+				`version=${this.PROTOCOL_VERSION}&gl=y&token=${this.token || ''}`,
+				{
+					headers: {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					httpsAgent: httpsAgent,
+				},
+			);
+
+			if (!response.data || !response.data.rooms) {
+				throw new Error('Failed to get rooms');
+			}
+
+			logger.info(`Retrieved ${response.data.rooms.length} rooms`);
+			return response.data.rooms;
+		} catch (error) {
+			logger.error('Failed to get rooms', error);
+			throw new Error(`Failed to get rooms: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Change game mode
+	 * @param {string} mode - Game mode ('b' = classic, 'ar' = arrows, 'ard' = death arrows, 'sp' = grapple, 'v' = vtol, 'f' = football)
+	 * @param {string} engine - Game engine ('b' = bonk, 'f' = football)
+	 */
+	async setGameMode(mode, engine = 'b') {
+		this.checkConnection();
+
+		// Validar modo
+		const validModes = ['b', 'ar', 'ard', 'sp', 'v', 'f'];
+		const validEngines = ['b', 'f'];
+
+		if (!validModes.includes(mode)) {
+			throw new Error(`Invalid mode. Valid modes: ${validModes.join(', ')}`);
+		}
+
+		if (!validEngines.includes(engine)) {
+			throw new Error(`Invalid engine. Valid engines: ${validEngines.join(', ')}`);
+		}
+
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_MODE, {
+			ga: engine,
+			mo: mode,
+		});
+
+		logger.info(`Game mode changed to: ${GAMEMODE_NAMES[mode]} (${ENGINE_NAMES[engine]})`);
+	}
+
+	/**
+	 * Set Football mode
+	 */
+	async setFootballMode() {
+		await this.setGameMode('f', 'f');
+	}
+
+	/**
+	 * Set Classic mode
+	 */
+	async setClassicMode() {
+		await this.setGameMode('b', 'b');
+	}
+
+	/**
+	 * Set Arrows mode
+	 */
+	async setArrowsMode() {
+		await this.setGameMode('ar', 'b');
+	}
+
+	/**
+	 * Set Death Arrows mode
+	 */
+	async setDeathArrowsMode() {
+		await this.setGameMode('ard', 'b');
+	}
+
+	/**
+	 * Set Grapple mode
+	 */
+	async setGrappleMode() {
+		await this.setGameMode('sp', 'b');
+	}
+
+	/**
+	 * Set VTOL mode
+	 */
+	async setVTOLMode() {
+		await this.setGameMode('v', 'b');
+	}
+
+	/**
+	 * Get room by name
+	 * @private
+	 * @param {string} roomName - Room name
+	 * @returns {Promise<Object|null>} Room object or null if not found
+	 */
+	async getRoomByName(roomName) {
+		try {
+			logger.info(`Searching for room: ${roomName}`);
+
+			const rooms = await this.getRooms(this.token);
+
+			for (const room of rooms) {
+				if (room.roomname === roomName) {
+					logger.info(`Found room: ${roomName}`);
+					return room;
+				}
+			}
+
+			logger.info(`Room not found: ${roomName}`);
+			return null;
+		} catch (error) {
+			logger.error(`Failed to find room: ${roomName}`, error);
+			throw new Error(`Failed to find room: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Get room address
+	 * @private
+	 * @param {string} id - Room ID
+	 * @returns {Promise<Object>} Room address
+	 */
+	async getRoomAddress(id) {
+		try {
+			logger.info(`Getting address for room ID: ${id}`);
+
+			const response = await axios.post(API.GET_ROOM_ADDRESS, `id=${id}`, {
+				headers: {
+					'Content-Type': 'application/x-www-form-urlencoded',
+				},
+				httpsAgent: httpsAgent,
+			});
+
+			if (!response.data || !response.data.address) {
+				throw new Error('Failed to get room address');
+			}
+
+			logger.info(`Retrieved address for room ID: ${id}`);
+			return response.data;
+		} catch (error) {
+			logger.error(`Failed to get address for room ID: ${id}`, error);
+			throw new Error(`Failed to get room address: ${error.message}`);
+		}
+	}
+
+	/**
+	 * Set up socket event handlers
+	 * @private
+	 */
+	setupSocketEvents() {
+		// Register listeners for all message types we care about
+		Object.values(SERVER_MESSAGE_TYPES).forEach((eventId) => {
+			this.socket.on(eventId, (...args) => {
+				// Create a packet array with event ID as first element and args as the rest
+				const packet = [eventId, ...args];
+
+				// Process the packet
+				const parsedPacket = parsePacket(packet);
+
+				// Emit events
+				this.events.emit('PACKET', parsedPacket);
+
+				// logger.debug(`Received event ${eventId}`, parsedPacket);
+			});
+		});
+
+		// Handle standard Socket.IO events
+		this.socket.on('connect', () => {
+			this.events.emit('connect');
+		});
+
+		this.socket.on('disconnect', (reason) => {
+			this.events.emit('disconnect', reason);
+		});
+
+		this.socket.on('error', (error) => {
+			this.events.emit('error', error);
+		});
+	}
+
+	/**
+	 * Send a message to the server using Socket.IO v2 protocol
+	 * @private
+	 * @param {number} eventId - Event ID from CLIENT_MESSAGE_TYPES
+	 * @param {any} data - Message data
+	 */
+	async sendMessage(eventId, data) {
+		this.checkConnection();
+
+		// if(eventId != 18 && eventId != 1){ // just for pix to not get annoyed by things
+		// }
+		logger.debug(`Sending message type ${eventId}`, data);
+
+		// For Socket.IO v2, we need to emit to the 'message' event with the event ID and data
+		// The server expects a message in the format: [eventId, data]
+		await this.socket.emit(eventId, data);
+		return true;
+	}
+
+	/**
+	 * Clean up resources
+	 */
+	stopBot() {
+		this.connected = false;
+
+		if (this.keepAliveTimer) {
+			clearInterval(this.keepAliveTimer);
+			this.keepAliveTimer = null;
+		}
+		return true;
+	}
+
+	getShareLink() {
+		return 'https://bonk.io/' + this.room.dbid + this.room.bypass;
+	}
+
+	/**
+	 * Send a chat message
+	 * @param {string} message - Message to send
+	 */
+	async chat(message) {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.CHAT_MESSAGE, {
+			message,
+		});
+	}
+
+	/**
+	 * Set player ready status
+	 * @param {boolean} ready - Ready status
+	 */
+	async ready(ready) {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.SET_READY, {
+			ready,
+		});
+	}
+
+	/**
+	 * Join a team
+	 * @param {number} team - Team to join
+	 */
+	async joinTeam(team) {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.CHANGE_OWN_TEAM, {
+			targetTeam: team,
+		});
+	}
+
+	/**
+	 * Toggle teams lock
+	 * @param {boolean} locked - Whether teams are locked
+	 */
+	async toggleTeams(locked) {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.TEAM_LOCK, {
+			teamLock: locked,
+		});
+	}
+
+	/**
+	 * Ban a player
+	 * @param {string|number} playerId - Player ID to ban
+	 */
+	async banPlayer(playerId) {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.KICK_BAN_PLAYER, {
+			banshortid: playerId,
+		});
+	}
+
+	/**
+	 * Leave the game
+	 */
+	async leaveGame() {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.RETURN_TO_LOBBY);
+	}
+
+	/**
+	 * Give host to another player
+	 * @param {string|number} playerId - Player ID to give host to
+	 */
+	async giveHost(playerId) {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_HOST_CHANGE, {
+			id: playerId,
+		});
+	}
 
 	/**
 	 * Get the host player
 	 * @returns {Object} Host player object
 	 */
-	getHost(){
+	getHost() {
 		return this.players.get(this.game.host);
 	}
 
-    /**
-     * Set number of rounds
-     * @param {number} rounds - Number of rounds
-     */
-    async setRounds(rounds) {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_ROUNDS, {
-            w: rounds
-        });
-    }
+	/**
+	 * Set number of rounds
+	 * @param {number} rounds - Number of rounds
+	 */
+	async setRounds(rounds) {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_ROUNDS, {
+			w: rounds,
+		});
+	}
 
-    /**
-     * Send an input to the game
-     * @param {Object} input - Input data
-     */
-    async sendInput(input) {
-        this.checkConnection();
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_INPUTS, {
-            i: input.input,
-            f: input.frame,
-            c: input.sequence
-        });
-    }
+	/**
+	 * Send an input to the game
+	 * @param {Object} input - Input data
+	 */
+	async sendInput(input) {
+		this.checkConnection();
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.SEND_INPUTS, {
+			i: input.input,
+			f: input.frame,
+			c: input.sequence,
+		});
+	}
 
-    /**
-     * Send a timesync message to the server
-     * @private
-     */
-    async sendTimesync() {
-        await this.sendMessage(CLIENT_MESSAGE_TYPES.TIMESYNC, {
-            jsonrpc: "2.0",
-            id: this.timeSync.count++,
-            method: "timesync"
-        });
-    }
+	/**
+	 * Send a timesync message to the server
+	 * @private
+	 */
+	async sendTimesync() {
+		await this.sendMessage(CLIENT_MESSAGE_TYPES.TIMESYNC, {
+			jsonrpc: '2.0',
+			id: this.timeSync.count++,
+			method: 'timesync',
+		});
+	}
 
-    /**
-     * Check if connected to server
-     * @private
-     * @throws {Error} If not connected
-     */
-    checkConnection() {
-        if (!this.connected || !this.socket) {
-            throw new Error('Not connected to server');
-        }
-        return true;
-    }
+	/**
+	 * Check if connected to server
+	 * @private
+	 * @throws {Error} If not connected
+	 */
+	checkConnection() {
+		if (!this.connected || !this.socket) {
+			throw new Error('Not connected to server');
+		}
+		return true;
+	}
 
-    /**
-     * Converts level to XP total
-     * @param {Number} level - The level to convert
-     * @returns {Number} The total XP required for this level
-     */
-    levelToXP(level) {
-        if (level < 1) return 0;
-        return 100 * Math.pow(level - 1, 2);
-    }
+	/**
+	 * Converts level to XP total
+	 * @param {Number} level - The level to convert
+	 * @returns {Number} The total XP required for this level
+	 */
+	levelToXP(level) {
+		if (level < 1) return 0;
+		return 100 * Math.pow(level - 1, 2);
+	}
 
-    /**
-     * Converts XP total to level
-     * @param {Number} xp - The XP amount to convert
-     * @returns {Number} The level for this XP amount
-     */
-    xpToLevel(xp) {
-        if (xp < 0) return 1;
-        return Math.floor(Math.sqrt(xp / 100) + 1);
-    }
+	/**
+	 * Converts XP total to level
+	 * @param {Number} xp - The XP amount to convert
+	 * @returns {Number} The level for this XP amount
+	 */
+	xpToLevel(xp) {
+		if (xp < 0) return 1;
+		return Math.floor(Math.sqrt(xp / 100) + 1);
+	}
 }
 
 module.exports = BonkBot;

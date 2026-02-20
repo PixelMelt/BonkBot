@@ -2,10 +2,8 @@
  * BonkBot - A JavaScript library for creating bots for bonk.io
  * @module bonkbot
  */
-const BonkBot = require("./bot");
-const {
-    LOG_LEVELS
-} = require("./utils/logger");
+const BonkBot = require('./bot');
+const { LOG_LEVELS } = require('./utils/logger');
 
 /**
  * Create a new BonkBot instance
@@ -13,11 +11,11 @@ const {
  * @returns {BonkBot} New BonkBot instance
  */
 function createBot(options = {}) {
-    return new BonkBot(options);
+	return new BonkBot(options);
 }
 
 module.exports = {
-    createBot,
-    LOG_LEVELS,
-    BonkBot,
+	createBot,
+	LOG_LEVELS,
+	BonkBot,
 };
